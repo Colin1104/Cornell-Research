@@ -1,0 +1,8 @@
+prefix=/home/pbb58/Cornell-Research/install
+
+Name: using_markers
+Description: Description of using_markers
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/pbb58/Cornell-Research/install/lib 
+Requires: 

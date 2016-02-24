@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "using_markers")
+set(using_markers_MAINTAINER "pbb58 <pbb58@todo.todo>")
+set(using_markers_DEPRECATED "")
+set(using_markers_VERSION "0.0.0")
+set(using_markers_BUILD_DEPENDS "octomap_msgs" "octomap_ros" "octomap_server" "roscpp" "tf" "visualization_msgs" "octomap")
+set(using_markers_RUN_DEPENDS "octomap_msgs" "octomap_ros" "octomap_server" "roscpp" "tf" "visualization_msgs" "octomap")
+set(using_markers_BUILDTOOL_DEPENDS "catkin")
