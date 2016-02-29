@@ -97,9 +97,9 @@ int main( int argc, char** argv )
 
     // Set the scale of the marker -- 1x1x1 here means 1m on a side
 // %Tag(SCALE)%
-    marker.scale.x = 0.8;
-    marker.scale.y = 0.5;
-    marker.scale.z = 0.5;
+    marker.scale.x = 1.0;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
 // %EndTag(SCALE)%
 
     // Set the color -- be sure to set alpha to something non-zero!
