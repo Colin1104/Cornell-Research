@@ -86,7 +86,7 @@ int main( int argc, char** argv )
     marker.pose.position.z = 0;
 
     tf::Quaternion q;
-    q.setRPY(0.0, 0.0, 0.0);
+    q.setRPY(0, 3.1415/4.0, 3.1415/4.0);
 
     //marker.pose.orientation = q;
     marker.pose.orientation.x = q.getX();
@@ -104,9 +104,9 @@ int main( int argc, char** argv )
 
     // Set the color -- be sure to set alpha to something non-zero!
 // %Tag(COLOR)%
-    marker.color.r = 0.0f;
-    marker.color.g = 1.0f;
-    marker.color.b = 0.0f;
+    marker.color.r = 1.0f;
+    marker.color.g = 0.0784314f;
+    marker.color.b = 0.576471f;
     marker.color.a = 1.0;
 // %EndTag(COLOR)%
 
