@@ -1,2 +1,0 @@
-using_markers
--DCATKIN_DEVEL_PREFIX=/home/pbb58/Cornell-Research/devel -DCMAKE_INSTALL_PREFIX=/home/pbb58/Cornell-Research/install
