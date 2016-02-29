@@ -45,6 +45,7 @@ int main( int argc, char** argv )
   ros::NodeHandle n;
   ros::Rate r(1);
   ros::Publisher marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 1);
+  ros::Publisher marker_pub2 = n.advertise<visualization_msgs::Marker>("visualization_marker2", 1);
 // %EndTag(INIT)%
 
   // Set our initial shape type to be a cube
@@ -56,9 +57,12 @@ int main( int argc, char** argv )
   while (ros::ok())
   {
     visualization_msgs::Marker marker;
+    visualization_msgs::Marker currentView;
     // Set the frame ID and timestamp.  See the TF tutorials for information on these.
     marker.header.frame_id = "/camera_link";
     marker.header.stamp = ros::Time::now();
+    currentView.header.frame_id = "/camera_link";
+    currentView.header.stamp = ros::Time::now();
 
 // %EndTag(MARKER_INIT)%
 
@@ -67,20 +71,27 @@ int main( int argc, char** argv )
 // %Tag(NS_ID)%
     marker.ns = "basic_shapes";
     marker.id = 0;
+    currentView.ns = "currentView";
+    currentView.id = 1;
 // %EndTag(NS_ID)%
 
     // Set the marker type.  Initially this is CUBE, and cycles between that and SPHERE, ARROW, and CYLINDER
 // %Tag(TYPE)%
     marker.type = shape;
+    currentView.type = visualization_msgs::Marker::ARROW;
 // %EndTag(TYPE)%
 
     // Set the marker action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
 // %Tag(ACTION)%
     marker.action = visualization_msgs::Marker::ADD;
+    currentView.action = visualization_msgs::Marker::ADD;
 // %EndTag(ACTION)%
 
     // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
 // %Tag(POSE)%
+    /////////////////////////////
+    //  Marker is one arrow    //
+    /////////////////////////////
     marker.pose.position.x = 0;
     marker.pose.position.y = 0;
     marker.pose.position.z = 0;
@@ -93,6 +104,23 @@ int main( int argc, char** argv )
     marker.pose.orientation.y = q.getY();
     marker.pose.orientation.z = q.getZ();
     marker.pose.orientation.w = q.getW();
+
+    /////////////////////////////////////
+    //  Current View is other arrow    //
+    /////////////////////////////////////
+    currentView.pose.position.x = 0;
+    currentView.pose.position.y = 0;
+    currentView.pose.position.z = 0;
+
+    tf::Quaternion q2;
+    q2.setRPY(0, 3.1415/2.0, 3.1415/4.0);
+
+    //marker.pose.orientation = q;
+    currentView.pose.orientation.x = q2.getX();
+    currentView.pose.orientation.y = q2.getY();
+    currentView.pose.orientation.z = q2.getZ();
+    currentView.pose.orientation.w = q2.getW();
+
 // %EndTag(POSE)%
 
     // Set the scale of the marker -- 1x1x1 here means 1m on a side
@@ -100,6 +128,7 @@ int main( int argc, char** argv )
     marker.scale.x = 1.0;
     marker.scale.y = 0.1;
     marker.scale.z = 0.1;
+    currentView.scale = marker.scale;
 // %EndTag(SCALE)%
 
     // Set the color -- be sure to set alpha to something non-zero!
@@ -108,6 +137,11 @@ int main( int argc, char** argv )
     marker.color.g = 0.0784314f;
     marker.color.b = 0.576471f;
     marker.color.a = 1.0;
+
+    currentView.color.r = 0.580392f;
+    currentView.color.g = 0.0f;
+    currentView.color.b = 0.827451f;
+    currentView.color.a = 1.0;
 // %EndTag(COLOR)%
 
 // %Tag(LIFETIME)%
@@ -126,6 +160,7 @@ int main( int argc, char** argv )
       sleep(1);
     }
     marker_pub.publish(marker);
+    marker_pub2.publish(currentView);
 // %EndTag(PUBLISH)%
 
 
