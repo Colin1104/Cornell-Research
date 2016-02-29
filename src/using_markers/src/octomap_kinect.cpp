@@ -30,8 +30,9 @@
 // %Tag(FULLTEXT)%
 // %Tag(INCLUDES)%
 #include <ros/ros.h>
-#include <visualization_msgs/Marker.h>
+#include <octomap_msgs.h>
 #include <tf/transform_broadcaster.h>
+
 
 
 
@@ -41,132 +42,13 @@
 // %Tag(INIT)%
 int main( int argc, char** argv )
 {
-  ros::init(argc, argv, "basic_shapes");
+  ros::init(argc, argv, "octomap_kinect");
   ros::NodeHandle n;
-  ros::Rate r(1);
-  ros::Publisher marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 1);
-  ros::Publisher marker_pub2 = n.advertise<visualization_msgs::Marker>("visualization_marker2", 1);
-// %EndTag(INIT)%
-
-  // Set our initial shape type to be a cube
-// %Tag(SHAPE_INIT)%
-  uint32_t shape = visualization_msgs::Marker::ARROW;
-// %EndTag(SHAPE_INIT)%
-
-// %Tag(MARKER_INIT)%
-  while (ros::ok())
-  {
-    visualization_msgs::Marker marker;
-    visualization_msgs::Marker currentView;
-    // Set the frame ID and timestamp.  See the TF tutorials for information on these.
-    marker.header.frame_id = "/camera_link";
-    marker.header.stamp = ros::Time::now();
-    currentView.header.frame_id = "/camera_link";
-    currentView.header.stamp = ros::Time::now();
-
-// %EndTag(MARKER_INIT)%
-
-    // Set the namespace and id for this marker.  This serves to create a unique ID
-    // Any marker sent with the same namespace and id will overwrite the old one
-// %Tag(NS_ID)%
-    marker.ns = "basic_shapes";
-    marker.id = 0;
-    currentView.ns = "currentView";
-    currentView.id = 1;
-// %EndTag(NS_ID)%
-
-    // Set the marker type.  Initially this is CUBE, and cycles between that and SPHERE, ARROW, and CYLINDER
-// %Tag(TYPE)%
-    marker.type = shape;
-    currentView.type = visualization_msgs::Marker::ARROW;
-// %EndTag(TYPE)%
-
-    // Set the marker action.  Options are ADD, DELETE, and new in ROS Indigo: 3 (DELETEALL)
-// %Tag(ACTION)%
-    marker.action = visualization_msgs::Marker::ADD;
-    currentView.action = visualization_msgs::Marker::ADD;
-// %EndTag(ACTION)%
-
-    // Set the pose of the marker.  This is a full 6DOF pose relative to the frame/time specified in the header
-// %Tag(POSE)%
-    /////////////////////////////
-    //  Marker is one arrow    //
-    /////////////////////////////
-    marker.pose.position.x = 0;
-    marker.pose.position.y = 0;
-    marker.pose.position.z = 0;
-
-    tf::Quaternion q;
-    q.setRPY(0, 3.1415/4.0, 3.1415/4.0);
-
-    //marker.pose.orientation = q;
-    marker.pose.orientation.x = q.getX();
-    marker.pose.orientation.y = q.getY();
-    marker.pose.orientation.z = q.getZ();
-    marker.pose.orientation.w = q.getW();
-
-    /////////////////////////////////////
-    //  Current View is other arrow    //
-    /////////////////////////////////////
-    currentView.pose.position.x = 0;
-    currentView.pose.position.y = 0;
-    currentView.pose.position.z = 0;
-
-    tf::Quaternion q2;
-    q2.setRPY(0, 3.1415/2.0, 3.1415/4.0);
-
-    //marker.pose.orientation = q;
-    currentView.pose.orientation.x = q2.getX();
-    currentView.pose.orientation.y = q2.getY();
-    currentView.pose.orientation.z = q2.getZ();
-    currentView.pose.orientation.w = q2.getW();
-
-// %EndTag(POSE)%
-
-    // Set the scale of the marker -- 1x1x1 here means 1m on a side
-// %Tag(SCALE)%
-    marker.scale.x = 1.0;
-    marker.scale.y = 0.1;
-    marker.scale.z = 0.1;
-    currentView.scale = marker.scale;
-// %EndTag(SCALE)%
-
-    // Set the color -- be sure to set alpha to something non-zero!
-// %Tag(COLOR)%
-    marker.color.r = 1.0f;
-    marker.color.g = 0.0784314f;
-    marker.color.b = 0.576471f;
-    marker.color.a = 1.0;
-
-    currentView.color.r = 0.580392f;
-    currentView.color.g = 0.0f;
-    currentView.color.b = 0.827451f;
-    currentView.color.a = 1.0;
-// %EndTag(COLOR)%
-
-// %Tag(LIFETIME)%
-    marker.lifetime = ros::Duration();
-// %EndTag(LIFETIME)%
-
-    // Publish the marker
-// %Tag(PUBLISH)%
-    while (marker_pub.getNumSubscribers() < 1)
-    {
-      if (!ros::ok())
-      {
-        return 0;
-      }
-      ROS_WARN_ONCE("Please create a subscriber to the marker");
-      sleep(1);
-    }
-    marker_pub.publish(marker);
-    marker_pub2.publish(currentView);
-// %EndTag(PUBLISH)%
+  ros::Subscriber sub = nh.subscribe("camera/depth/image", MY_ROS_QUEUE_SIZE, imgcb);
+  // get the image data by subscribing to the topic
+  // Then, building the octomap from there shouldn't be too bad
 
 
-// %Tag(SLEEP_END)%
-    r.sleep();
-  }
 // %EndTag(SLEEP_END)%
 }
 // %EndTag(FULLTEXT)%
