@@ -44,25 +44,43 @@
 using namespace std;
 using namespace octomap;
 
+int MAX_RANGE = -1;
+OcTree tree(0.01);
+ros::NodeHandle n;
+
+
+
 void pointCloudConversion(const sensor_msgs::PointCloud2& cloud) {
 	Pointcloud octomapCloud;
 	pointCloud2ToOctomap(cloud, octomapCloud);
+	tree.insertPointCloud(octomapCloud, point3d(0,0,0), MAX_RANGE);
+	tree.writeBinary("whatevs.bt");
+	// ros::Publisher pub = n.advertise<OctomapBinary>("/octBinary", 1000);
+
+	// pub.publish()
 	cout << "done";
+	while (true) {
+		
+	}
+
 }
 
 
 // %Tag(INIT)%
 int main( int argc, char** argv )
 {
-  ros::init(argc, argv, "octomap_kinect");
-  ros::NodeHandle n;
+  	ros::init(argc, argv, "octomap_kinect");
+  	
   
-  ros::Subscriber sub = n.subscribe("camera/depth/points", 1000, pointCloudConversion);
-  // get the image data by subscribing to the topic
-  // Then, building the octomap from there shouldn't be too bad
+  	ros::Subscriber sub = n.subscribe("camera/depth/points", 1000, pointCloudConversion);
 
-ros::spin();
-return 0;
+
+
+  	// get the image data by subscribing to the topic
+  	// Then, building the octomap from there shouldn't be too bad
+
+	ros::spin();
+	return 0;
 // %EndTag(SLEEP_END)%
 }
 // %EndTag(FULLTEXT)%
