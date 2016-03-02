@@ -30,25 +30,39 @@
 // %Tag(FULLTEXT)%
 // %Tag(INCLUDES)%
 #include <ros/ros.h>
-#include <octomap_msgs.h>
+#include <octomap_msgs/Octomap.h>
 #include <tf/transform_broadcaster.h>
-
+#include <octomap/octomap.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <geometry_msgs/Point.h>
+#include <octomap_ros/conversions.h>
 
 
 
 
 // %EndTag(INCLUDES)%
+using namespace std;
+using namespace octomap;
+
+void pointCloudConversion(const sensor_msgs::PointCloud2& cloud) {
+	Pointcloud octomapCloud;
+	pointCloud2ToOctomap(cloud, octomapCloud);
+	cout << "done";
+}
+
 
 // %Tag(INIT)%
 int main( int argc, char** argv )
 {
   ros::init(argc, argv, "octomap_kinect");
   ros::NodeHandle n;
-  ros::Subscriber sub = nh.subscribe("camera/depth/image", MY_ROS_QUEUE_SIZE, imgcb);
+  
+  ros::Subscriber sub = n.subscribe("camera/depth/points", 1000, pointCloudConversion);
   // get the image data by subscribing to the topic
   // Then, building the octomap from there shouldn't be too bad
 
-
+ros::spin();
+return 0;
 // %EndTag(SLEEP_END)%
 }
 // %EndTag(FULLTEXT)%
