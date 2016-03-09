@@ -47,26 +47,25 @@ using namespace std;
 using namespace octomap;
 using namespace octomap_msgs;
 
-int MAX_RANGE = 3;
+int MAX_RANGE = 10;
 OcTree tree(0.01);
 bool writeFile;
 ros::Publisher pub;
 Octomap msg;
+sensor_msgs::PointCloud2 kinectCloud;
+bool flag = false;
+int ctr = 0;
 
-
-
-void pointCloudConversion(const sensor_msgs::PointCloud2& cloud) {
-	cout << "in callback method";
+void publishOctomap() {
+  	cout << "in publish octomap\n";
 	Pointcloud octomapCloud;
-	pointCloud2ToOctomap(cloud, octomapCloud);
+	pointCloud2ToOctomap(kinectCloud, octomapCloud);
 	tree.insertPointCloud(octomapCloud, point3d(0,0,0), MAX_RANGE);
 	if (writeFile) {
 	  tree.writeBinary("whatevs.bt");
-	  cout << "done";
-	  while (true) { }
+	  cout << "done\n";
 	}
 	else{
-	  cout << "Before issue\n";
 	  msg.header.frame_id = "/camera_link";
 	  msg.header.stamp = ros::Time::now();
 	  tree.prune();
@@ -74,12 +73,19 @@ void pointCloudConversion(const sensor_msgs::PointCloud2& cloud) {
 	  cout << "binaryMapToMsg\n";
 	  pub.publish(msg);
 
-	  
-	
 	}
-
-
 }
+void update(const sensor_msgs::PointCloud2ConstPtr& cloud) {
+  flag = true;  
+  ctr++;
+  kinectCloud = *cloud;
+  cout << ".";
+  if (flag && (ctr % 100) == 0){
+	publishOctomap();
+	}
+}
+
+
 
 
 // %Tag(INIT)%
@@ -89,9 +95,7 @@ int main( int argc, char** argv )
 	writeFile = false;
   	ros::NodeHandle n;
 	pub = n.advertise<octomap_msgs::Octomap>("/octBinary", 15);
-  	ros::Subscriber sub = n.subscribe("camera/depth/points", 1000, pointCloudConversion);
-	
-
+  	ros::Subscriber sub = n.subscribe("camera/depth/points", 1, update);
 
   	// get the image data by subscribing to the topic
   	// Then, building the octomap from there shouldn't be too bad
