@@ -48,7 +48,7 @@ using namespace octomap;
 using namespace octomap_msgs;
 
 int MAX_RANGE = 10;
-OcTree tree(0.01);
+OcTree tree(0.05);
 bool writeFile;
 ros::Publisher pub;
 Octomap msg;
@@ -66,7 +66,7 @@ void publishOctomap() {
 	  cout << "done\n";
 	}
 	else{
-	  msg.header.frame_id = "/camera_link";
+	  msg.header.frame_id = "/camera_depth_optical_frame";
 	  msg.header.stamp = ros::Time::now();
 	  tree.prune();
 	  octomap_msgs::binaryMapToMsg<OcTree>(tree, msg);
@@ -80,9 +80,6 @@ void update(const sensor_msgs::PointCloud2ConstPtr& cloud) {
   ctr++;
   kinectCloud = *cloud;
   cout << ".";
-  if (flag && (ctr % 100) == 0){
-	publishOctomap();
-	}
 }
 
 
@@ -96,11 +93,18 @@ int main( int argc, char** argv )
   	ros::NodeHandle n;
 	pub = n.advertise<octomap_msgs::Octomap>("/octBinary", 15);
   	ros::Subscriber sub = n.subscribe("camera/depth/points", 1, update);
-
-  	// get the image data by subscribing to the topic
+	int x = 1;
+//   	get the image data by subscribing to the topic
   	// Then, building the octomap from there shouldn't be too bad
-
-	ros::spin();
+	while (x > 0) {
+	cout << "enter a number";
+	
+	cin >> x;
+	cout << "done\n";
+	ros::spinOnce();
+	publishOctomap();
+	}
+	
 	return 0;
 // %EndTag(SLEEP_END)%
 }
