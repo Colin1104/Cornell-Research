@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   tf
   visualization_msgs
+  pcl_ros
 )
 find_package(octomap REQUIRED)
 include_directories(${OCTOMAP_INCLUDE_DIRS})
@@ -199,3 +200,5 @@ add_executable(octomap_kinect src/octomap_kinect.cpp)
 target_link_libraries(octomap_kinect ${catkin_LIBRARIES})
 add_executable(arrow_markers src/arrowmarkers.cpp)
 target_link_libraries(arrow_markers ${catkin_LIBRARIES})
+add_executable(pclExample src/pclExample.cpp)
+target_link_libraries(pclExample ${catkin_LIBRARIES})

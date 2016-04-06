@@ -92,8 +92,8 @@ int main( int argc, char** argv )
 	writeFile = false;
   	ros::NodeHandle n;
 	pub = n.advertise<octomap_msgs::Octomap>("/octBinary", 15);
-//   	ros::Subscriber sub = n.subscribe("camera/depth/points", 1, update);
-  	ros::Subscriber sub = n.subscribe("/rgbd/cloud", 1, update);
+  	ros::Subscriber sub = n.subscribe("camera/depth/points", 1, update);
+  	// ros::Subscriber sub = n.subscribe("/rgbd/cloud", 1, update);
 	int x = 1;
 //   	get the image data by subscribing to the topic
   	// Then, building the octomap from there shouldn't be too bad
