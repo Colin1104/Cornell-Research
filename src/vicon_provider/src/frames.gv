@@ -1,0 +1,22 @@
+digraph G {
+"camera_link" -> "camera_rgb_frame"[label="Broadcaster: /camera_base_link1\nAverage rate: 10.192 Hz\nMost recent transform: 1462387480.079 ( -0.067 sec old)\nBuffer length: 4.906 sec\n"];
+"camera_depth_frame" -> "camera_depth_optical_frame"[label="Broadcaster: /camera_base_link2\nAverage rate: 10.194 Hz\nMost recent transform: 1462387480.080 ( -0.067 sec old)\nBuffer length: 4.905 sec\n"];
+"camera_link" -> "camera_depth_frame"[label="Broadcaster: /camera_base_link\nAverage rate: 10.199 Hz\nMost recent transform: 1462387480.012 ( 0.000 sec old)\nBuffer length: 4.804 sec\n"];
+"camera_rgb_frame" -> "camera_rgb_optical_frame"[label="Broadcaster: /camera_base_link3\nAverage rate: 10.188 Hz\nMost recent transform: 1462387480.086 ( -0.074 sec old)\nBuffer length: 4.908 sec\n"];
+"map" -> "kinectPB"[label="Broadcaster: /xtion_publisher\nAverage rate: 10.205 Hz\nMost recent transform: 1462387480.003 ( 0.010 sec old)\nBuffer length: 4.900 sec\n"];
+"openni_rgb_optical_frame" -> "map"[label="Broadcaster: /rgbdslam\nAverage rate: 10000.000 Hz\nMost recent transform: 1462387464.438 ( 15.575 sec old)\nBuffer length: 0.000 sec\n"];
+"kinectPB" -> "base"[label="Broadcaster: /xtion_publisher\nAverage rate: 10.205 Hz\nMost recent transform: 1462387480.003 ( 0.010 sec old)\nBuffer length: 4.900 sec\n"];
+"sensorGoal" -> "baseGoal"[label="Broadcaster: /xtion_publisher\nAverage rate: 10.206 Hz\nMost recent transform: 1462387480.003 ( 0.009 sec old)\nBuffer length: 4.899 sec\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1462387480.012"[ shape=plaintext ] ;
+ }->"camera_link";
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1462387480.012"[ shape=plaintext ] ;
+ }->"sensorGoal";
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1462387480.012"[ shape=plaintext ] ;
+ }->"openni_rgb_optical_frame";
+}
