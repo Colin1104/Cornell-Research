@@ -68,22 +68,16 @@ class ViconPublisher:
 			zq = pose[6]/A*math.sin(A/2)
 	    q = [xq,yq,zq,W]
         
-            #Publisher for RGBDSLAM
+
             br.sendTransform((pose[1],pose[2],pose[3]),
                 q,
                 rospy.Time.now(),  # should we be use vicon time instead?
                 "kinectPB",
-                "map");
-            # publisher for CCNY_RGBD
-            # br.sendTransform((pose[1],pose[2],pose[3]),
-            #     q,
-            #     rospy.Time.now(),  # should we be use vicon time instead?
-            #     "kinectPB",
-            #     "odom");
+                "vicon")
 
-            br.sendTransform((-0.1, -0.3, 0), transformations.quaternion_from_euler(0, 0, 0, 'rxyz'), rospy.Time.now(), "base", "kinectPB")
+            # br.sendTransform((-0.1, -0.3, 0), transformations.quaternion_from_euler(0, 0, 0, 'rxyz'), rospy.Time.now(), "base", "kinectPB")
 
-            br.sendTransform((-0.1, -0.3, 0), transformations.quaternion_from_euler(0, 0, 0, 'rxyz'), rospy.Time.now(), "baseGoal", "sensorGoal")
+            # br.sendTransform((-0.1, -0.3, 0), transformations.quaternion_from_euler(0, 0, 0, 'rxyz'), rospy.Time.now(), "baseGoal", "sensorGoal")
 		
  	    rate.sleep()
 
