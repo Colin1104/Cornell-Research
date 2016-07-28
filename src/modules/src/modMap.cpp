@@ -95,6 +95,7 @@ void tag_info_cb(std_msgs::String dataString)
 
 int main(int argc, char** argv)
 {
+    cout<<"Starting modMap"<<endl;
   ros::init(argc, argv, "modMap");
   
   ros::NodeHandle node;

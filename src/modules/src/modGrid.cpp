@@ -48,8 +48,6 @@ bool mapReceived;
 Octomap mapMsg;
 double res = 0.01;
 double rFactor = 1 / res;
-tf::TransformListener listener;
-tf::StampedTransform stransform;
 ros::Publisher path_pub;
 ros::Publisher grid_pub;
 
@@ -93,6 +91,7 @@ void tag_info_cb(std_msgs::String dataString)
 
 int main(int argc, char** argv)
 {
+    cout<<"Starting modGrid"<<endl;
   // Main creates a node that will generate and publish a path when new tag names are received.
   ros::init(argc, argv, "modGrid");
   ros::NodeHandle node;
@@ -106,15 +105,23 @@ int main(int argc, char** argv)
   tf::Transform modTransform;
   
   ros::Subscriber sub = node.subscribe("/octomap_binary", 15, map_cb);
-  ros::Publisher path_pub = node.advertise<nav_msgs::Path>("/smorePath", 15);
-  ros::Publisher grid_pub = node.advertise<nav_msgs::OccupancyGrid>("/nav_map", 15);
+  path_pub = node.advertise<nav_msgs::Path>("/smorePath", 15);
+  grid_pub = node.advertise<nav_msgs::OccupancyGrid>("/nav_map", 15);
   // Subscribe to tag info topic:
   ros::Subscriber tagInfoSub = node.subscribe("/reconf_request", 10, tag_info_cb); 
+
+  while(ros::ok())
+  {
+      ros::spinOnce();
+  }
 
 }
 
 int generatePath(string egoTagString)
 {
+  tf::TransformListener listener;
+  tf::StampedTransform stransform;
+
   cout << "Waiting for map" << endl;
   
   while (!mapReceived && ros::ok())
