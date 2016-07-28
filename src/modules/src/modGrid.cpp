@@ -16,9 +16,9 @@
 
 #include <boost/thread/thread.hpp>
 
-#include <sensorCell.h>
-#include <MinHeap.h>
-#include <InfoNode.h>
+#include <modules/sensorCell.h>
+#include <modules/MinHeap.h>
+#include <modules/InfoNode.h>
 
 #include <ros/ros.h>
 #include <tf/transform_listener.h>
@@ -58,9 +58,7 @@ void map_cb(const octomap_msgs::OctomapConstPtr& map)
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "modGrid");
-  
   ros::NodeHandle node;
-  
   ros::Rate rate(10.0);
   
   tf::TransformListener listener;
@@ -73,7 +71,6 @@ int main(int argc, char** argv)
   tf::Transform modTransform;
   
   ros::Subscriber sub = node.subscribe("/octomap_binary", 15, map_cb);
-
   ros::Publisher path_pub = node.advertise<nav_msgs::Path>("/smorePath", 15);
   ros::Publisher grid_pub = node.advertise<nav_msgs::OccupancyGrid>("/nav_map", 15);
   
@@ -85,10 +82,16 @@ int main(int argc, char** argv)
   }
   
   cout << "Got map" << endl;
-  
-  //if (!mapReceived) cout << "Never got map yiiiikess..." << endl;
-  
-  OcTree tree(*binaryMsgToMap(mapMsg));
+
+  AbstractOcTree* atree = octomap_msgs::msgToMap(mapMsg);
+  OcTree* tree = NULL;
+  if (atree){
+    tree = dynamic_cast<OcTree*>(atree);
+  } else {
+    ROS_ERROR("Error creating octree from received message");
+    if (mapMsg.id == "ColorOcTree")
+      ROS_WARN("You requested a binary map for a ColorOcTree - this is currently not supported. Please add -f to request a full map");
+      }
   
   sleep(5);
   
@@ -102,7 +105,6 @@ int main(int argc, char** argv)
     ros::Duration(1.0).sleep();
   }
   point3d origin(stransform.getOrigin().x(), stransform.getOrigin().y(), stransform.getOrigin().z());
-  
   cout << origin.x() << " : " << origin.y() << " : " << origin.z() << endl;
   
   try{
@@ -115,7 +117,6 @@ int main(int argc, char** argv)
     ros::Duration(1.0).sleep();
   }
   point3d goal(stransform.getOrigin().x(), stransform.getOrigin().y(), stransform.getOrigin().z());
-  
   cout << "Reach Point: " << goal.x() << " : " << goal.y() << " : " << goal.z() << endl;
   
   try{
@@ -128,30 +129,29 @@ int main(int argc, char** argv)
     ros::Duration(1.0).sleep();
   }
   point3d dock(stransform.getOrigin().x(), stransform.getOrigin().y(), stransform.getOrigin().z());
-  
   cout << "Docking Point: " << dock.x() << " : " << dock.y() << " : " << dock.z() << endl;
   
   double robotRad = 0.06;
   
   double minX, minY, minZ, maxX, maxY, maxZ;
-  tree.getMetricMin(minX, minY, minZ);
-  tree.getMetricMax(maxX, maxY, maxZ);
+  tree->getMetricMin(minX, minY, minZ);
+  tree->getMetricMax(maxX, maxY, maxZ);
   point3d minPoint(minX, minY, minZ);
   point3d maxPoint(maxX, maxY, maxZ);
   
   cout << minX << ", " << maxX << ", " << minY << ", " << maxY << endl;
-  minPoint = tree.keyToCoord(tree.coordToKey(minPoint));
+  minPoint = tree->keyToCoord(tree->coordToKey(minPoint));
   minX = minPoint.x();
   minY = minPoint.y();
   minZ = minPoint.z();
-  maxPoint = tree.keyToCoord(tree.coordToKey(maxPoint));
+  maxPoint = tree->keyToCoord(tree->coordToKey(maxPoint));
   maxX = maxPoint.x();
   maxY = maxPoint.y();
   maxZ = maxPoint.z();
   
   cout << minX << ", " << maxX << ", " << minY << ", " << maxY << endl;
   
-  tree.expand();
+  tree->expand();
   
   int rangeX = round((maxX - minX) * rFactor);
   int rangeY = round((maxY - minY) * rFactor);
@@ -184,10 +184,10 @@ int main(int argc, char** argv)
   
   cout << "First" << endl;
   
-  tree.expand();
-  for (OcTree::leaf_iterator iter = tree.begin_leafs(); iter != tree.end_leafs(); iter++)
+  tree->expand();
+  for (OcTree::leaf_iterator iter = tree->begin_leafs(); iter != tree->end_leafs(); iter++)
   {
-    if (tree.isNodeOccupied(*iter) && iter.getZ() > 0.03 && iter.getCoordinate().distanceXY(origin) > 0.08)
+    if (tree->isNodeOccupied(*iter) && iter.getZ() > 0.03 && iter.getCoordinate().distanceXY(origin) > 0.08)
     {
       int index = int((iter.getCoordinate().y() - minY) / res) * rangeX + (iter.getCoordinate().x() - minX) / res;
       
@@ -213,43 +213,6 @@ int main(int argc, char** argv)
       }
     }
     
-    /*if (!tree.isNodeOccupied(*iter) && iter.getZ() > 0 && iter.getZ() <= 0.5)
-    {
-      int index = round((iter.getCoordinate().y() - minY) / res) * rangeX + round((iter.getCoordinate().x() - minX) / res);
-      freeMap[index]++;
-    }*/
-  }
-  
-  /*for (int index = 0; index < rangeX * rangeY; index++)
-  {
-    if (freeMap[index] < 20 && gridMap[index].coords.distanceXY(firstPos) > 1 && gridMap[index].coords.distanceXY(origin) > 0.6)
-    {
-      gridMap[index].object = true;
-      gridMap[index].occupied = true;
-      
-      for (double offX = -robotRad; offX <= robotRad; offX += res)
-      {
-	for (double offY = -robotRad; offY <= robotRad; offY += res)
-	{
-	  if (sqrt(pow(offX, 2) + pow(offY, 2)) <= robotRad)
-	  {
-	    int xInd = round((gridMap[index].coords.x() + offX - minX) * rFactor);
-	    int yInd = round((gridMap[index].coords.y() + offY - minY) * rFactor);
-	    
-	    if (xInd >= 0 && xInd < rangeX && yInd >= 0 && yInd < rangeY)
-	    {
-	      int offIdx = yInd * rangeX + xInd;
-	      if (gridMap[offIdx].coords.distanceXY(firstPos) > 0.4 && gridMap[offIdx].coords.distanceXY(origin) > 0.2)
-	      {
-		gridMap[offIdx].occupied = true;
-	      }
-	    }
-	  }
-	}
-      }
-    }
-  }*/
-  
   cout << "Second" << endl;
   
   cout << rangeX << ", " << rangeY << " : " << int((origin.x() - minX) * rFactor) << ", " << int((origin.y() - minY) * rFactor) << endl;

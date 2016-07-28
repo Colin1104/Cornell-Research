@@ -201,13 +201,26 @@ catkin_package(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-include_directories(~/catkin_ws/src/modules/include)
+include_directories(include)
 
 add_executable (modMap src/modMap.cpp)
 add_dependencies(modMap ${catkin_EXPORTED_TARGETS})
 target_link_libraries(modMap ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
 add_executable (modGrid src/modGrid.cpp)
+
+add_library(SensorCell
+    include/${PROJECT_NAME}/sensorCell.cpp
+)
+add_library(GridNode
+    include/${PROJECT_NAME}/GridNode.cpp
+)
+add_library(MinHeap
+    include/${PROJECT_NAME}/MinHeap.cpp
+)
+add_library(InfoNode
+    include/${PROJECT_NAME}/InfoNode.cpp
+)
 
 add_dependencies(modGrid ${catkin_EXPORTED_TARGETS})
 target_link_libraries (modGrid GridNode SensorCell MinHeap InfoNode)

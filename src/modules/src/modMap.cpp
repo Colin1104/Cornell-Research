@@ -56,14 +56,8 @@ int main(int argc, char** argv)
   tf::Transform modOffset;
   tf::Transform modTransform;
   tf::Transform dockOffset;
-
-  //ros::Publisher path_pub = node.advertise<nav_msgs::Path>("/smorePath", 15);
-  //ros::Publisher grid_pub = node.advertise<nav_msgs::OccupancyGrid>("/nav_map", 15);
   
   sleep(5);
-  
-  //ros::Subscriber sub = node.subscribe("/octomap_binary", 15, map_cb);
-  //ros::Subscriber flag_sub = node.subscribe("/nbv_iter", 15, flag_cb);
   
   try{
     ros::Time gTime = ros::Time::now();
