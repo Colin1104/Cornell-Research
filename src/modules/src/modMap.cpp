@@ -27,6 +27,7 @@
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Int32.h>
+#include <std_msgs/String.h>
 
 #include <octomap_msgs/conversions.h>
 #include <octomap_msgs/Octomap.h>
@@ -40,9 +41,12 @@ using namespace octomath;
 using namespace octomap_msgs;
 
 // Globals:
-tf::Transform modTransform;
 tf::Transform dockOffset;
+tf::Transform modOffset;
 string dockTagString;
+tf::Quaternion q;
+
+
 
 string parse(string input, int id)
 // String parsing function to extract data:
@@ -84,9 +88,9 @@ void updateDockOffset(string dataString)
 void tag_info_cb(std_msgs::String dataString)
 // Callback for tag information topic
 {
-  dockTagString = parse(dataString, 2); // TODO write me
-  updateModOffset(dataString); // TODO write me
-  updateDockOffset(dataString); // TODO write me
+  dockTagString = parse(dataString.data, 2); // TODO write me
+  updateModOffset(dataString.data); // TODO write me
+  updateDockOffset(dataString.data); // TODO write me
 }
 
 int main(int argc, char** argv)
@@ -97,17 +101,13 @@ int main(int argc, char** argv)
   
   ros::Rate rate(10.0);
   
+  
+  tf::Transform modTransform;
   tf::TransformListener listener;
   static tf::TransformBroadcaster br;
   tf::Transform transform;
   tf::StampedTransform stransform;
-  tf::Quaternion q;
   
-  tf::Transform modOffset;
-  /*
-  tf::Transform modTransform;
-  tf::Transform dockOffset;
-  */
 
   // Subscribe to the tag info topic:
   ros::Subscriber tagInfoSub = node.subscribe("/reconf_request", 10, tag_info_cb);

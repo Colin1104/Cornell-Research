@@ -48,6 +48,12 @@ bool mapReceived;
 Octomap mapMsg;
 double res = 0.01;
 double rFactor = 1 / res;
+tf::TransformListener listener;
+tf::StampedTransform stransform;
+ros::Publisher path_pub;
+ros::Publisher grid_pub;
+
+int generatePath(string egoTagString);
 
 string parse(string input, int id)
 // String parsing function to extract data:
@@ -81,7 +87,7 @@ void map_cb(const octomap_msgs::OctomapConstPtr& map)
 void tag_info_cb(std_msgs::String dataString)
 // Callback for tag information topic
 {
-  egoTagString = parse(dataString, 0); // TODO write me
+  string egoTagString = parse(dataString.data, 0); // TODO write me
   generatePath(egoTagString);
 }
 
@@ -92,10 +98,8 @@ int main(int argc, char** argv)
   ros::NodeHandle node;
   ros::Rate rate(10.0);
   
-  tf::TransformListener listener;
   static tf::TransformBroadcaster br;
   tf::Transform transform;
-  tf::StampedTransform stransform;
   tf::Quaternion q;
   
   tf::Transform modOffset;
@@ -109,7 +113,7 @@ int main(int argc, char** argv)
 
 }
 
-void generatePath(string egoTagString)
+int generatePath(string egoTagString)
 {
   cout << "Waiting for map" << endl;
   
@@ -128,7 +132,7 @@ void generatePath(string egoTagString)
     ROS_ERROR("Error creating octree from received message");
     if (mapMsg.id == "ColorOcTree")
       ROS_WARN("You requested a binary map for a ColorOcTree - this is currently not supported. Please add -f to request a full map");
-      }
+  }
   
   sleep(5);
   
@@ -255,7 +259,7 @@ void generatePath(string egoTagString)
 	}
       }
     }
-    
+  }  
   cout << "Second" << endl;
   
   cout << rangeX << ", " << rangeY << " : " << int((origin.x() - minX) * rFactor) << ", " << int((origin.y() - minY) * rFactor) << endl;
@@ -284,7 +288,7 @@ void generatePath(string egoTagString)
     vector<float>::iterator edgeIt = minNode->edges.begin();
     for (vector<GridNode*>::iterator iter = minNode->neighbors.begin(); iter != minNode->neighbors.end(); iter++, edgeIt++)
     {
-      GridNode* nodePt = *iter;
+      //GridNode* nodePt = *iter; // unused?
       if ((*iter)->occupied == 0 && (*iter)->cost > (minNode->cost + *edgeIt))
       {
 	(*iter)->parent = minNode;
