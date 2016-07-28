@@ -31,6 +31,7 @@
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Int32.h>
+#include <std_msgs/String.h>
 
 #include <octomap_msgs/conversions.h>
 #include <octomap_msgs/Octomap.h>
@@ -48,15 +49,45 @@ Octomap mapMsg;
 double res = 0.01;
 double rFactor = 1 / res;
 
+string parse(string input, int id)
+// String parsing function to extract data:
+{
+    // 0 = egoTagString, 1 = ego face, 2 = dockTagString, 3 = dock face
+    std::string s = input;
+    std::string delimiter = ":";
+
+    size_t pos = 0;
+    std::string token;
+    int count = 0;
+    while ((pos = s.find(delimiter)) != std::string::npos) {
+        token = s.substr(0, pos);
+        if (count == id) {
+            return token;
+        }
+        s.erase(0, pos + delimiter.length());
+        count++;
+    }
+    return s;
+}
+
 void map_cb(const octomap_msgs::OctomapConstPtr& map)
+// Callback for octopap topic
 {
   cout << ".";
   mapMsg = *map;
   mapReceived = true;
 }
 
+void tag_info_cb(std_msgs::String dataString)
+// Callback for tag information topic
+{
+  egoTagString = parse(dataString, 0); // TODO write me
+  generatePath(egoTagString);
+}
+
 int main(int argc, char** argv)
 {
+  // Main creates a node that will generate and publish a path when new tag names are received.
   ros::init(argc, argv, "modGrid");
   ros::NodeHandle node;
   ros::Rate rate(10.0);
@@ -73,7 +104,13 @@ int main(int argc, char** argv)
   ros::Subscriber sub = node.subscribe("/octomap_binary", 15, map_cb);
   ros::Publisher path_pub = node.advertise<nav_msgs::Path>("/smorePath", 15);
   ros::Publisher grid_pub = node.advertise<nav_msgs::OccupancyGrid>("/nav_map", 15);
-  
+  // Subscribe to tag info topic:
+  ros::Subscriber tagInfoSub = node.subscribe("/reconf_request", 10, tag_info_cb); 
+
+}
+
+void generatePath(string egoTagString)
+{
   cout << "Waiting for map" << endl;
   
   while (!mapReceived && ros::ok())
@@ -97,8 +134,12 @@ int main(int argc, char** argv)
   
   try{
     ros::Time gTime = ros::Time::now();
+    /*
     listener.waitForTransform("map", "tag_0", gTime, ros::Duration(15.0));
     listener.lookupTransform("map", "tag_0", gTime, stransform);
+    */
+    listener.waitForTransform("map", egoTagString, gTime, ros::Duration(15.0));
+    listener.lookupTransform("map", egoTagString, gTime, stransform);
   }
   catch (tf::TransformException &ex) {
     ROS_ERROR("%s",ex.what());
@@ -109,6 +150,7 @@ int main(int argc, char** argv)
   
   try{
     ros::Time gTime = ros::Time::now();
+    // Goal transform is published by modMap.cpp
     listener.waitForTransform("map", "goal", gTime, ros::Duration(15.0));
     listener.lookupTransform("map", "goal", gTime, stransform);
   }
@@ -121,6 +163,7 @@ int main(int argc, char** argv)
   
   try{
     ros::Time gTime = ros::Time::now();
+    // Dock transform is published by modMap.cpp
     listener.waitForTransform("map", "dock", gTime, ros::Duration(15.0));
     listener.lookupTransform("map", "dock", gTime, stransform);
   }
@@ -373,3 +416,4 @@ int main(int argc, char** argv)
   
   return 0;
 }
+

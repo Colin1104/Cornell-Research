@@ -39,6 +39,56 @@ using namespace octomap;
 using namespace octomath;
 using namespace octomap_msgs;
 
+// Globals:
+tf::Transform modTransform;
+tf::Transform dockOffset;
+string dockTagString;
+
+string parse(string input, int id)
+// String parsing function to extract data:
+{
+    // 0 = egoTagString, 1 = ego face, 2 = dockTagString, 3 = dock face
+    std::string s = input;
+    std::string delimiter = ":";
+
+    size_t pos = 0;
+    std::string token;
+    int count = 0;
+    while ((pos = s.find(delimiter)) != std::string::npos) {
+        token = s.substr(0, pos);
+        if (count == id) {
+            return token;
+        }
+        s.erase(0, pos + delimiter.length());
+        count++;
+    }
+    return s;
+}
+
+void updateModOffset(string dataString)
+// updates global modOffset variable based on dataString
+{
+  q.setRPY(0, 0, 0);
+  modOffset.setRotation(q);
+  modOffset.setOrigin( tf::Vector3(0.0, 0.16, 0.0) );
+}
+
+void updateDockOffset(string dataString)
+// updates global dockOffset variable based on dataString
+{
+  q.setRPY(0, 0, 0);
+  dockOffset.setRotation(q);
+  dockOffset.setOrigin( tf::Vector3(0.0, 0.06, 0.0) );
+}
+
+void tag_info_cb(std_msgs::String dataString)
+// Callback for tag information topic
+{
+  dockTagString = parse(dataString, 2); // TODO write me
+  updateModOffset(dataString); // TODO write me
+  updateDockOffset(dataString); // TODO write me
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "modMap");
@@ -54,8 +104,13 @@ int main(int argc, char** argv)
   tf::Quaternion q;
   
   tf::Transform modOffset;
+  /*
   tf::Transform modTransform;
   tf::Transform dockOffset;
+  */
+
+  // Subscribe to the tag info topic:
+  ros::Subscriber tagInfoSub = node.subscribe("/reconf_request", 10, tag_info_cb);
   
   sleep(5);
   
@@ -89,8 +144,12 @@ int main(int argc, char** argv)
   {
     br.sendTransform(tf::StampedTransform(modTransform, ros::Time::now(), "camera_rgb_frame", "map"));
     rate.sleep();
+    /*
     br.sendTransform(tf::StampedTransform(modOffset, ros::Time::now(), "tag_4", "goal"));
     br.sendTransform(tf::StampedTransform(dockOffset, ros::Time::now(), "tag_4", "dock"));
+    */
+    br.sendTransform(tf::StampedTransform(modOffset, ros::Time::now(), dockTagString, "goal"));
+    br.sendTransform(tf::StampedTransform(dockOffset, ros::Time::now(), dockTagString, "dock"));
     ros::spinOnce();
   }
 }
