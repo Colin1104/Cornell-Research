@@ -241,7 +241,7 @@ int generatePath(string egoTagString)
   tree->expand();
   for (OcTree::leaf_iterator iter = tree->begin_leafs(); iter != tree->end_leafs(); iter++)
   {
-    if (tree->isNodeOccupied(*iter) && iter.getZ() > 0.03 && iter.getCoordinate().distanceXY(origin) > 0.08)
+    if (tree->isNodeOccupied(*iter) && iter.getZ() > 0.05 && iter.getCoordinate().distanceXY(origin) > 0.08)
     {
       int index = int((iter.getCoordinate().y() - minY) / res) * rangeX + (iter.getCoordinate().x() - minX) / res;
       

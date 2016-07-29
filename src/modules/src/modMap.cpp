@@ -74,7 +74,7 @@ void updateModOffset(string dataString)
 {
   q.setRPY(0, 0, 0);
   modOffset.setRotation(q);
-  modOffset.setOrigin( tf::Vector3(0.0, 0.16, 0.0) );
+  modOffset.setOrigin( tf::Vector3(0.20,0.0, 0.0) );
 }
 
 void updateDockOffset(string dataString)
@@ -82,7 +82,7 @@ void updateDockOffset(string dataString)
 {
   q.setRPY(0, 0, 0);
   dockOffset.setRotation(q);
-  dockOffset.setOrigin( tf::Vector3(0.0, 0.06, 0.0) );
+  dockOffset.setOrigin( tf::Vector3(0.07,0.0, 0.0) );
 }
 
 void tag_info_cb(std_msgs::String dataString)
@@ -117,8 +117,8 @@ int main(int argc, char** argv)
   
   try{
     ros::Time gTime = ros::Time::now();
-    listener.waitForTransform("camera_rgb_frame", "tag_5", gTime, ros::Duration(15.0));
-    listener.lookupTransform("camera_rgb_frame", "tag_5", gTime, stransform);
+    listener.waitForTransform("usb_cam", "tag_5", gTime, ros::Duration(15.0));
+    listener.lookupTransform("usb_cam", "tag_5", gTime, stransform);
   }
   catch (tf::TransformException &ex) {
     ROS_ERROR("%s",ex.what());
@@ -133,17 +133,19 @@ int main(int argc, char** argv)
   
   q.setRPY(0, 0, 0);
   modOffset.setRotation(q);
-  modOffset.setOrigin( tf::Vector3(0.0, 0.16, 0.0) );
+  modOffset.setOrigin( tf::Vector3(0.20,0.0, 0.0) );
   
   q.setRPY(0, 0, 0);
   dockOffset.setRotation(q);
-  dockOffset.setOrigin( tf::Vector3(0.0, 0.06, 0.0) );
+  dockOffset.setOrigin( tf::Vector3(0.07,0.0, 0.0) );
   
   cout << "Transforms Saved" << endl;
+
+  dockTagString = "tag_4";
   
   while (ros::ok())
   {
-    br.sendTransform(tf::StampedTransform(modTransform, ros::Time::now(), "camera_rgb_frame", "map"));
+    br.sendTransform(tf::StampedTransform(modTransform, ros::Time::now(), "usb_cam", "map"));
     rate.sleep();
     /*
     br.sendTransform(tf::StampedTransform(modOffset, ros::Time::now(), "tag_4", "goal"));
