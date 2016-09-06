@@ -101,6 +101,8 @@ bool startAlg = false;
 //OcTree tree(res);
 Octomap mapMsg;
 
+nav_msgs::OccupancyGrid map2d;
+
 void map_cb(const octomap_msgs::OctomapConstPtr& map)
 {
   cout << ".";
@@ -379,6 +381,11 @@ void flag_cb(const std_msgs::Int32ConstPtr& msg)
   startAlg = true;
 }
 
+void grid_cb(const nav_msgs::OccupancyGridConstPtr& grid)
+{
+  map2d = *grid;
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "pose_3d");
@@ -401,6 +408,7 @@ int main(int argc, char** argv)
   
   ros::Subscriber sub = node.subscribe("/octomap_binary", 15, map_cb);
   ros::Subscriber flag_sub = node.subscribe("/nbv_iter", 15, flag_cb);
+  ros::Subscriber grid_sub = node.subscribe("/projected_map", 15, grid_cb);
   
   point3d sensorOffset(0.1, 0.3, 0);
   point3d firstPos;
@@ -524,7 +532,7 @@ int main(int argc, char** argv)
   int NBVcount = 0;
   while (ros::ok())
   {
-    cout << "NBV " << NBVcount++ << endl; 
+    /*cout << "NBV " << NBVcount++ << endl; 
     mapReceived = false;
     startAlg = false;
     while ((!mapReceived || !startAlg) && ros::ok())
@@ -558,7 +566,7 @@ int main(int argc, char** argv)
     point3d camPosition (stransform.getOrigin().x(), stransform.getOrigin().y(), 0);
     origin = NBVList.back();
     
-    cout << "Map Loaded " << treeTemp->getResolution() << endl;
+    cout << "Map Loaded " << treeTemp->getResolution() << endl;*/
     
     point3d egoPose(0, 0, 0);
     point3d endPoint(-1.4, -1.5, 0);
@@ -570,6 +578,7 @@ int main(int argc, char** argv)
     size_t pointCount = 0;
     
     //point3d origin = curPose;
+    point3d camPosition(0,0,0);
     
     OcTree tree(res);
     
@@ -592,7 +601,7 @@ int main(int argc, char** argv)
 	  flag = true;
 	}
       }
-      if (tree.isNodeOccupied(*iter) && (iter.getZ() < 0.03 || iter.getX() < -2 || iter.getX() > 1 || iter.getY() < -1 || iter.getY() > 1) || flag)
+      if (tree.isNodeOccupied(*iter)) // && (iter.getZ() < 0.03 || iter.getX() < -2 || iter.getX() > 1 || iter.getY() < -1 || iter.getY() > 1) || flag)
       {
 	tree.setNodeValue(iter.getKey(), -lEmpty);
 	tree.updateNode(iter.getKey(), false);
@@ -808,7 +817,7 @@ int main(int argc, char** argv)
     cout << gridMap.size() << endl;
     
     for (vector<GridNode>::iterator iter = gridMap.begin(); iter != gridMap.end(); iter++)
-    {    
+    {
       if (iter->occupied)
       {
 	grid.data.push_back(100);

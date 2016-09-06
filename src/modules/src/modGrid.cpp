@@ -316,7 +316,7 @@ int main(int argc, char** argv)
   cout << gridMap.size() << endl;
   
   for (vector<GridNode>::iterator iter = gridMap.begin(); iter != gridMap.end(); iter++)
-  {    
+  {
     if (iter->occupied)
     {
       grid.data.push_back(100);
