@@ -1,0 +1,7 @@
+<launch>
+	<include file="$(find pose_3d)/launch/youbot.launch" />
+
+	<node pkg="pose_3d" type="cloud_throttle" name="cloud_throttle" />
+
+	<include file="$(find pose_3d)/launch/octomap_experiment.launch" />
+</launch>

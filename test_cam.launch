@@ -1,0 +1,30 @@
+<launch>
+  <arg name="urdf_file" default="$(find xacro)/xacro.py '/home/jonathan/test_cam.urdf.xacro'" />
+  <param name="robot_description" command="$(arg urdf_file)" />
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+      <arg name="use_sim_time" value="true"/>
+      <arg name="debug" value="false"/>
+      <arg name="gui" value="true" />
+      <arg name="paused" value="false"/>
+      <!-- <arg name="world_name" value="/home/jonathan/pose_world.world"/> -->
+  </include>
+
+  <!-- Gazebo model spawner -->
+  <node name="spawn_turtlebot_model" pkg="gazebo_ros" type="spawn_model"
+        args="$(optenv ROBOT_INITIAL_POSE) -urdf -param robot_description -model kinect"/>
+
+  <!-- start robot state publisher -->
+  <node pkg="robot_state_publisher" type="state_publisher" name="robot_state_publisher" output="screen" >
+      <param name="publish_frequency" type="double" value="1.0" />
+      <param name="tf_prefix" type="string" value="" />
+  </node>
+
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+
+  <node pkg="tf" type="static_transform_publisher" name="camera_gazebo_link" args="0 0 0 0 0 0 1 kinect__camera_rgb_frame camera_rgb_frame 100" />
+
+  <include file="$(find gazebo2rviz)/launch/gazebo2rviz.launch" />
+
+  <node pkg="pose_3d" type="cloud_throttle" name="cloud_throttle" />
+</launch>

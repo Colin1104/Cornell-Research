@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<launch>
+	<!-- load the robot description file -->
+	<!-- <param name="robot_description" command="cat '$(find youbot_model)/urdf/youbot.urdf'" /> -->
+	<param name="robot_description" command="$(find xacro)/xacro.py '$(find youbot_description)/robots/youbot.urdf.xacro'"/>
+		<!-- remap from="joint_states" to="youbot_state"/> -->
+	
+	<!-- start robot_state_publisher assuming /joint_states is the default topic -->
+	<node pkg="robot_state_publisher" type="state_publisher" name="robot_state_publisher" output="screen"/>
+	
+	<!-- start robot_state_publisher assuming /joint_states is not the default topic and the drivers default topics are used -->
+	<!--
+	<node pkg="robot_state_publisher" type="state_publisher" name="robot_arm_state_publisher" output="screen">
+		<remap from="joint_states" to="arm_1/joint_states"/> 
+	</node>
+
+	<node pkg="robot_state_publisher" type="state_publisher" name="robot_base_state_publisher" output="screen">
+		<remap from="joint_states" to="base/joint_states"/> 
+	</node>
+	-->
+	
+	<node pkg="tf" type="static_transform_publisher" name="xtion1_frame"
+	args="0.08 -0.01 0.02 1.5708 0.0 1.53 /arm_link_5 /camera_link 1" />
+	
+	<node pkg="tf" type="static_transform_publisher" name="xtion2_frame"
+	args="0.0 0.0 0.055 0.0 0.0 0.0 /base_laser_front_link /camera1_link 1" />
+	
+	<!-- <node pkg="tf" type="static_transform_publisher" name="map_frame"
+	args="0 0 0.079 0 0 0 /origin /odom 1" /> -->
+	
+</launch>
