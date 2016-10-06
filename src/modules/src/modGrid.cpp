@@ -171,6 +171,32 @@ int generatePath(string egoTagString)
   }
   point3d goal(stransform.getOrigin().x(), stransform.getOrigin().y(), stransform.getOrigin().z());
   cout << "Reach Point: " << goal.x() << " : " << goal.y() << " : " << goal.z() << endl;
+
+  try{
+    ros::Time gTime = ros::Time::now();
+    // Goal transform is published by modMap.cpp
+    listener.waitForTransform("map", "goal1", gTime, ros::Duration(15.0));
+    listener.lookupTransform("map", "goal1", gTime, stransform);
+  }
+  catch (tf::TransformException &ex) {
+    ROS_ERROR("%s",ex.what());
+    ros::Duration(1.0).sleep();
+  }
+  point3d goal1(stransform.getOrigin().x(), stransform.getOrigin().y(), stransform.getOrigin().z());
+  cout << "Reach Point: " << goal1.x() << " : " << goal1.y() << " : " << goal1.z() << endl;
+
+  try{
+    ros::Time gTime = ros::Time::now();
+    // Goal transform is published by modMap.cpp
+    listener.waitForTransform("map", "goal2", gTime, ros::Duration(15.0));
+    listener.lookupTransform("map", "goal2", gTime, stransform);
+  }
+  catch (tf::TransformException &ex) {
+    ROS_ERROR("%s",ex.what());
+    ros::Duration(1.0).sleep();
+  }
+  point3d goal2(stransform.getOrigin().x(), stransform.getOrigin().y(), stransform.getOrigin().z());
+  cout << "Reach Point: " << goal2.x() << " : " << goal2.y() << " : " << goal2.z() << endl;
   
   try{
     ros::Time gTime = ros::Time::now();
@@ -185,7 +211,7 @@ int generatePath(string egoTagString)
   point3d dock(stransform.getOrigin().x(), stransform.getOrigin().y(), stransform.getOrigin().z());
   cout << "Docking Point: " << dock.x() << " : " << dock.y() << " : " << dock.z() << endl;
   
-  double robotRad = 0.06;
+  double robotRad = 0.07;
   
   double minX, minY, minZ, maxX, maxY, maxZ;
   tree->getMetricMin(minX, minY, minZ);
@@ -222,16 +248,16 @@ int generatePath(string egoTagString)
       
       for (int i = -1; i <= 1; i += 1)
       {
-	for (int j = -1; j <= 1; j += 1)
-	{
-	  if ((i != 0 || j != 0) && x + i >= 0 && x + i < rangeX && y + j >= 0 && y + j < rangeY)
-	  {
-	    gridMap[rangeX * y + x].neighbors.push_back(&gridMap[rangeX * (y + j) + x + i]);
-	    gridMap[rangeX * y + x].edges.push_back(sqrt(pow(i, 2) + pow(j, 2)) * res);
-	    
-	    //cout << gridMap[rangeX*y + x].neighbors.size() << ", " << gridMap[rangeX*y + x].edges.size() << endl;
-	  }
-	}
+    for (int j = -1; j <= 1; j += 1)
+    {
+      if ((i != 0 || j != 0) && x + i >= 0 && x + i < rangeX && y + j >= 0 && y + j < rangeY)
+      {
+        gridMap[rangeX * y + x].neighbors.push_back(&gridMap[rangeX * (y + j) + x + i]);
+        gridMap[rangeX * y + x].edges.push_back(sqrt(pow(i, 2) + pow(j, 2)) * res);
+        
+        //cout << gridMap[rangeX*y + x].neighbors.size() << ", " << gridMap[rangeX*y + x].edges.size() << endl;
+      }
+    }
       }
     }
   }
@@ -250,20 +276,20 @@ int generatePath(string egoTagString)
       
       for (double offX = -robotRad; offX <= robotRad; offX += res)
       {
-	for (double offY = -robotRad; offY <= robotRad; offY += res)
-	{
-	  if (sqrt(pow(offX, 2) + pow(offY, 2)) <= robotRad)
-	  {
-	    int xInd = (gridMap[index].coords.x() + offX - minX) * rFactor;
-	    int yInd = (gridMap[index].coords.y() + offY - minY) * rFactor;
-	    
-	    if (xInd >= 0 && xInd < rangeX && yInd >= 0 && yInd < rangeY)
-	    {
-	      int offIdx = yInd * rangeX + xInd;
-	      gridMap[offIdx].occupied = true;
-	    }
-	  }
-	}
+    for (double offY = -robotRad; offY <= robotRad; offY += res)
+    {
+      if (sqrt(pow(offX, 2) + pow(offY, 2)) <= robotRad)
+      {
+        int xInd = (gridMap[index].coords.x() + offX - minX) * rFactor;
+        int yInd = (gridMap[index].coords.y() + offY - minY) * rFactor;
+        
+        if (xInd >= 0 && xInd < rangeX && yInd >= 0 && yInd < rangeY)
+        {
+          int offIdx = yInd * rangeX + xInd;
+          gridMap[offIdx].occupied = true;
+        }
+      }
+    }
       }
     }
   }  
@@ -298,18 +324,18 @@ int generatePath(string egoTagString)
       //GridNode* nodePt = *iter; // unused?
       if ((*iter)->occupied == 0 && (*iter)->cost > (minNode->cost + *edgeIt))
       {
-	(*iter)->parent = minNode;
-	
-	if ((*iter)->state == 0)
-	{
-	  (*iter)->cost = minNode->cost + *edgeIt;
-	  heapy.Push((*iter));
-	  (*iter)->state = 1;
-	}
-	else if ((*iter)->state == 1)
-	{
-	  heapy.Update((*iter)->heapIdx, minNode->cost + *edgeIt);
-	}
+    (*iter)->parent = minNode;
+    
+    if ((*iter)->state == 0)
+    {
+      (*iter)->cost = minNode->cost + *edgeIt;
+      heapy.Push((*iter));
+      (*iter)->state = 1;
+    }
+    else if ((*iter)->state == 1)
+    {
+      heapy.Update((*iter)->heapIdx, minNode->cost + *edgeIt);
+    }
       }
     }
   }
@@ -385,15 +411,15 @@ int generatePath(string egoTagString)
     {
       if (iter->x() == path.poses.back().pose.position.x)
       {
-	state = 0;
+    state = 0;
       }
       else if (iter->y() == path.poses.back().pose.position.y)
       {
-	state = 1;
+    state = 1;
       }
       else
       {
-	state = 2;
+    state = 2;
       }
     }
     
@@ -409,14 +435,28 @@ int generatePath(string egoTagString)
     
     oldState = state;
   }
-  
+
   geometry_msgs::PoseStamped pose;
+  pose.header.stamp = path.header.stamp;
+  pose.header.frame_id = path.header.frame_id;
+  pose.pose.position.x = goal1.x();
+  pose.pose.position.y = goal1.y();
+  pose.pose.position.z = 0.08;
+  path.poses.push_back(pose);
+
+  pose.header.stamp = path.header.stamp;
+  pose.header.frame_id = path.header.frame_id;
+  pose.pose.position.x = goal2.x();
+  pose.pose.position.y = goal2.y();
+  pose.pose.position.z = 0.08;
+  path.poses.push_back(pose);
+  
   pose.header.stamp = path.header.stamp;
   pose.header.frame_id = path.header.frame_id;
   pose.pose.position.x = dock.x();
   pose.pose.position.y = dock.y();
   pose.pose.position.z = 0.08;
-  path.poses.push_back(pose);
+  //path.poses.push_back(pose);
   
   cout << "Path Message Generated" << endl;
   
@@ -427,4 +467,5 @@ int generatePath(string egoTagString)
   
   return 0;
 }
+
 

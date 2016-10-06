@@ -43,6 +43,8 @@ using namespace octomap_msgs;
 // Globals:
 tf::Transform dockOffset;
 tf::Transform modOffset;
+tf::Transform modOffset1;
+tf::Transform modOffset2;
 string dockTagString;
 tf::Quaternion q;
 
@@ -133,7 +135,15 @@ int main(int argc, char** argv)
   
   q.setRPY(0, 0, 0);
   modOffset.setRotation(q);
-  modOffset.setOrigin( tf::Vector3(0.20,0.0, 0.0) );
+  modOffset.setOrigin( tf::Vector3(0.13,0.0, 0.0) );
+
+  q.setRPY(0, 0, 0);
+  modOffset1.setRotation(q);
+  modOffset1.setOrigin( tf::Vector3(0.08,0.0, 0.0) );
+
+  q.setRPY(0, 0, 0);
+  modOffset2.setRotation(q);
+  modOffset2.setOrigin( tf::Vector3(0.05,0.0, 0.0) );
   
   q.setRPY(0, 0, 0);
   dockOffset.setRotation(q);
@@ -152,7 +162,10 @@ int main(int argc, char** argv)
     br.sendTransform(tf::StampedTransform(dockOffset, ros::Time::now(), "tag_4", "dock"));
     */
     br.sendTransform(tf::StampedTransform(modOffset, ros::Time::now(), dockTagString, "goal"));
+    br.sendTransform(tf::StampedTransform(modOffset1, ros::Time::now(), dockTagString, "goal1"));
+    br.sendTransform(tf::StampedTransform(modOffset2, ros::Time::now(), dockTagString, "goal2"));
     br.sendTransform(tf::StampedTransform(dockOffset, ros::Time::now(), dockTagString, "dock"));
     ros::spinOnce();
   }
 }
+
