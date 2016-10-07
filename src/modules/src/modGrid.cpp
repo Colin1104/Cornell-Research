@@ -214,7 +214,7 @@ int generatePath(string egoTagString)
   double robotRad = 0.07;
   
   double minX, minY, minZ, maxX, maxY, maxZ;
-  tree->getMetricMin(minX, minY, minZ);
+  /*tree->getMetricMin(minX, minY, minZ);
   tree->getMetricMax(maxX, maxY, maxZ);
   point3d minPoint(minX, minY, minZ);
   point3d maxPoint(maxX, maxY, maxZ);
@@ -227,7 +227,12 @@ int generatePath(string egoTagString)
   maxPoint = tree->keyToCoord(tree->coordToKey(maxPoint));
   maxX = maxPoint.x();
   maxY = maxPoint.y();
-  maxZ = maxPoint.z();
+  maxZ = maxPoint.z();*/
+
+  minX = -1.0;
+  maxX = 1.0;
+  minY = -1.0;
+  maxY = 1.0;
   
   cout << minX << ", " << maxX << ", " << minY << ", " << maxY << endl;
   
@@ -264,7 +269,7 @@ int generatePath(string egoTagString)
   
   cout << "First" << endl;
   
-  tree->expand();
+  /*tree->expand();
   for (OcTree::leaf_iterator iter = tree->begin_leafs(); iter != tree->end_leafs(); iter++)
   {
     if (tree->isNodeOccupied(*iter) && iter.getZ() > 0.05 && iter.getCoordinate().distanceXY(origin) > 0.08)
@@ -293,7 +298,7 @@ int generatePath(string egoTagString)
       }
     }
   }  
-  cout << "Second" << endl;
+  cout << "Second" << endl;*/
   
   cout << rangeX << ", " << rangeY << " : " << int((origin.x() - minX) * rFactor) << ", " << int((origin.y() - minY) * rFactor) << endl;
   
