@@ -13,6 +13,7 @@
 
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <visualization_msgs/Marker.h>
 
 #include <octomap/octomap.h>
 #include <octomap_msgs/Octomap.h>
@@ -49,16 +50,39 @@ bool debug = false;
 
 tf::TransformListener *listener;
 
+class Pose
+{
+public:
+  float x, y, theta;
+  
+  Pose(int x, int y, int theta)
+  {
+    this->x = x;
+    this->y = y;
+    this->theta = theta;
+  }
+  
+  Pose()
+  {
+  }
+  
+  Pose operator+(const Pose &p)
+  {
+    return Pose(this->x + p.x, this->y + p.y, this->theta + p.theta);
+  }
+};
+
 class Config
 {
 public:
   bool omni;		//Is config steerable?
-  vector<bool> obs;	//List of features that comprise obstacles
+  vector<bool> obs;	//Obstacle status for each feature, starting with flat
+  vector<float> costs;	//List of costs for each feature
   int w;		//Width of robot footprint
   int h;		//Height of robot footprint
   int r;		//Radius of robot footprint (omni)
   
-  Config(bool omni, vector<bool> obs, int h, int w, int r)
+  Config(bool omni, vector<bool> obs, vector<float> costs, int h, int w, int r)
   {
     this->omni = omni;
     this->obs = obs;
@@ -66,7 +90,83 @@ public:
     this->h = h;
     this->r = r;
   }
+  
+  Config()
+  {
+    
+  }
+  
+  vector<Pose> getActions(int theta)
+  {
+    vector<Pose> acts;
+    if (this->omni)
+    {
+      //Eight-Connected Neighbors
+      acts = {Pose(-1, -1, 0), Pose(-1, 0, 0), Pose(-1, 1, 0), Pose(0, -1, 0), Pose(0, 1, 0),
+	Pose(1, -1, 0), Pose(1, 0, 0), Pose(1, 1, 0)};
+    }
+    else
+    {
+      //Forward-Backward Neighbors
+      switch (theta)
+      {
+	case 0:
+	  acts = {Pose(-1, 0, 0), Pose(1, 0, 0)};
+	  break;
+	case 1:
+	  acts = {Pose(-2, -1, 1), Pose(2, 1, 1)};
+	  break;
+	case 2:
+	  acts = {Pose(-1, -1, 2), Pose(1, 1, 2)};
+	  break;
+	case 3:
+	  acts = {Pose(-1, -2, 3), Pose(1, 2, 3)};
+	  break;
+	case 4:
+	  acts = {Pose(0, -1, 4), Pose(0, 1, 4)};
+	  break;
+	case 5:
+	  acts = {Pose(1, -2, 5), Pose(-1, 2, 5)};
+	  break;
+	case 6:
+	  acts = {Pose(1, -1, 6), Pose(-1, 1, 6)};
+	  break;
+	case 7:
+	  acts = {Pose(2, -1, 7), Pose(-2, 1, 7)};
+	  break;
+	default:
+	  acts = {};
+	  break;
+      }
+    }
+    
+    return acts;
+  }
+  
+  float getCost(vector<bool> feat1, vector<bool> feat2)
+  {
+    
+  }
 };
+
+class Node
+{
+public:
+  Pose pose;
+  Config config;
+  vector<int> neighbs;
+  
+  Node(Pose pose, Config config, vector<int> neighbs)
+  {
+    this->pose = pose;
+    this->config = config;
+    this->neighbs = neighbs;
+  }
+};
+
+typedef vector<vector<int>> gridNodeMap;
+typedef vector<gridNodeMap> thetaNodeMap;
+typedef vector<thetaNodeMap> configNodeMap;
 
 void map_cb(const octomap_msgs::OctomapConstPtr& map)
 {
@@ -97,41 +197,54 @@ void cloud_cb(sensor_msgs::PointCloud2::ConstPtr msg)
   cloud_received = true;
 }
 
-vector<int> ClassifyFlat(const nav_msgs::OccupancyGrid &occ_grid, int padding, int filterSize, float varThresh)
+vector<int> ClassifyFlat(const nav_msgs::OccupancyGrid &occ_grid, int padding, int rFilter, float varThresh)
 {
   //0 - obs, 1 - flat
   vector<int> features(occ_grid.data.size(), 0);
   
-  for (int i = 0; i < occ_grid.info.height - filterSize; i++)
+  for (int i = 0; i < occ_grid.info.height; i++)
   {
-    for (int j = 0; j < occ_grid.info.width - filterSize; j++)
+    for (int j = 0; j < occ_grid.info.width; j++)
     {
       float xSqSum = 0;
       float xSum = 0;
-      for (int offY = 0; offY < filterSize; offY++)
+      int sampleCt = 0;
+      for (int offY = -rFilter; offY < rFilter; offY++)
       {
-	for (int offX = 0; offX < filterSize; offX++)
+	int chord = sqrt(pow(rFilter, 2) - pow(offY, 2));
+	for (int offX = -chord; offX < chord; offX++)
 	{
+	  int y = i + offY;
+	  int x = j + offX;
+	  
+	  if (y < 0 || y >= occ_grid.info.height || x < 0 || x >= occ_grid.info.width) continue;
+	  
 	  int idx = (i + offY) * occ_grid.info.width + j + offX;
 	  
-	  xSqSum += pow(occ_grid.data[idx], 2);
-	  xSum += occ_grid.data[idx];
+	  float val = float(occ_grid.data[idx]) / 100.0 - 0.5;
+	  if (occ_grid.data[idx] == -1) val = 0;
+	  
+	  xSqSum += pow(val, 2);
+	  xSum += val;
+	  sampleCt++;
 	}
       }
       
-      float var = xSqSum / pow(filterSize, 2) - pow(xSum / pow(filterSize, 2), 2);
+      float var = xSqSum / sampleCt - pow(xSum / sampleCt, 2);
       
-      if (var < varThresh)
+      if (var < varThresh || sampleCt == 0)
       {
-	for (int offY = 0; offY < filterSize; offY++)
+	features[i * occ_grid.info.width + j] = 1;
+	
+	/*for (int offY = 0; offY < filterSize; offY++)
 	{
 	  for (int offX = 0; offX < filterSize; offX++)
 	  {
 	    int idx = (i + offY) * occ_grid.info.width + j + offX;
 	    
-	    features[idx] = 1;
+	    features[idx] = 0;
 	  }
-	}
+	}*/
       }
     }
   }
@@ -139,8 +252,8 @@ vector<int> ClassifyFlat(const nav_msgs::OccupancyGrid &occ_grid, int padding, i
   return features;
 }
 
-vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_grid, int size)
-{  
+vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_grid, int size, vector<bool> *selection=NULL)
+{
   vector<nav_msgs::OccupancyGrid> snippets;
   
   cout << "Input Map Dimensions: " << occ_grid.info.height << " x " << occ_grid.info.width << " : " << occ_grid.data.size() << endl;
@@ -150,6 +263,10 @@ vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_
     for (int j = 0; j < occ_grid.info.width - size; j++)
     {
       int idx = i * occ_grid.info.width + j;
+      
+      int selIdx = i * (occ_grid.info.width - size) + j;
+      
+      if (selection != NULL && (*selection)[selIdx] == 0) continue;
       
       nav_msgs::OccupancyGrid snippet = occ_grid;
       snippet.info.height = size;
@@ -175,7 +292,7 @@ vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_
 }
 
 void bloatRadius(gridSubMap &grid, int cogY, int cogX, int r, int bloatFeat)
-{  
+{
   for (int i = -r; i < r; i++)
   {
     //iterate over a circle with radius r
@@ -210,14 +327,14 @@ void bloatFoot(gridSubMap &grid, int cogY, int cogX, int w, int h, float theta, 
   }
 }
 
-configMap bloatMap(const vector<int> &data, int height, int width, const vector<Config> &configs, int nAngles, int nFeats)
+configMap bloatMap(const vector<int> &data, int height, int width, const vector<Config> &configs, vector<float> angles, int nFeats)
 {
   //Init config-space map
   configMap planGraph;
   
   for (int c = 0; c < configs.size(); c++)
   {
-    int angleSize = configs[c].omni + nAngles * !configs[c].omni;
+    int angleSize = configs[c].omni + angles.size() * !configs[c].omni;
     planGraph.push_back(
       thetaSubMap(angleSize, gridSubMap(height, vector<vector<bool>>(width, vector<bool>(nFeats, 0)))));
   }
@@ -228,21 +345,21 @@ configMap bloatMap(const vector<int> &data, int height, int width, const vector<
     for (int j = 0; j < width; j++)
     {
       int feature = data[i * width + j];
-      if (feature <= 0) continue;
+      if (feature == 0) continue;
       //Iterate over configs
       for (int c = 0; c < configs.size(); c++)
       {
 	Config conf = configs[c];
+	int bloatFeat = !conf.obs[(feature > 0)] * !(feature < 0);
 	if (conf.omni)
 	{
-	  bloatRadius(planGraph[c][0], i, j, conf.r, feature * !conf.obs[feature]);
+	  bloatRadius(planGraph[c][0], i, j, conf.r, bloatFeat);
 	}
 	else
 	{
-	  for (int a = 0; a < nAngles; a++)
+	  for (int a = 0; a < angles.size(); a++)
 	  {
-	    float theta = float(a) * 2 * 3.141592 / float(nAngles);
-	    bloatFoot(planGraph[c][a], i, j, conf.w, conf.h, theta, feature * !conf.obs[feature]);
+	    bloatFoot(planGraph[c][a], i, j, conf.w, conf.h, angles[a] * 3.141592 / 180, bloatFeat);
 	  }
 	}
       }
@@ -250,6 +367,95 @@ configMap bloatMap(const vector<int> &data, int height, int width, const vector<
   }
   
   return planGraph;
+}
+
+void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap &bloatedMap, int height, int width,
+		 vector<Config> configs, int nAngles)
+{
+  for (int c = 0; c < configs.size(); c++)
+  {
+    graphGrid.push_back(
+      thetaNodeMap((configs[c].omni ? 1 : nAngles), gridNodeMap(height, vector<int>(width, -1))));
+  }
+  
+  int pointer = 0;
+  for (int i = 0; i < height; i++)
+  {
+    for (int j = 0; j < width; j++)
+    {      
+      for (int c = 0; c < configs.size(); c++)
+      {
+	for (int theta = 0; theta < (configs[c].omni ? 1 : nAngles); theta++)
+	{
+	  vector<bool> bloatFeats = bloatedMap[c][theta][i][j];
+	  if (!bloatFeats[0])
+	  {
+	    graph.push_back(Node(Pose(i, j, theta), configs[c], vector<int>(0)));
+	    graphGrid[c][theta][i][j] = pointer++;
+	  }
+	}
+      }
+    }
+  }
+  
+  /*graph[0].pose.x = 17;
+  cout << graph[0].pose.x << ", " << graph[0].pose.y << ", " << graph[0].pose.theta << endl;
+  int idx = graphGrid[0][0][0][0];
+  cout << graph[idx].pose.x << ", " << graph[idx].pose.y << ", " << graph[idx].pose.theta << endl;
+  
+  graph[idx].pose.x = 130;
+  cout << graph[0].pose.x << ", " << graph[0].pose.y << ", " << graph[0].pose.theta << endl;
+  graph[idx].neighbs.push_back(-1);*/
+  
+  cout << "Sizes: " << graphGrid[1].size() << endl;
+  
+  for (int i = 0; i < height; i++)
+  {
+    for (int j = 0; j < width; j++)
+    {
+      for (int c = 0; c < configs.size(); c++)
+      {
+	for (int theta = 0; theta < graphGrid[c].size(); theta++)
+	{
+	  int nodeIdx = graphGrid[c][theta][i][j];
+	  
+	  if (nodeIdx >= 0)
+	  {
+	    //Connect action neighbs
+	    vector<Pose> actions = configs[c].getActions(theta);
+	    
+	    for (int a = 0; a < actions.size(); a++)
+	    {
+	      int y = i + actions[a].y;
+	      int x = j + actions[a].x;
+	      int th = actions[a].theta;
+	      
+	      if (th >= 0 && th < graphGrid[c].size() && y >= 0 && y < graphGrid[c][th].size() && x >= 0 && x < graphGrid[c][th][y].size())
+	      {
+		int neighbIdx = graphGrid[c][theta][y][x];
+		
+		if (neighbIdx >= 0)
+		{
+		  graph[nodeIdx].neighbs.push_back(neighbIdx);
+		}
+	      }
+	    }
+	    
+	    for (int nC = 0; nC < configs.size(); nC++)
+	    {
+	      int nTheta = !configs[nC].omni * theta;
+	      int neighbIdx = graphGrid[nC][nTheta][i][j];
+	      
+	      if (neighbIdx >= 0)
+	      {
+		graph[nodeIdx].neighbs.push_back(neighbIdx);
+	      }
+	    }
+	  }
+	}
+      }
+    }
+  }
 }
 
 int main(int argc, char** argv)
@@ -267,6 +473,14 @@ int main(int argc, char** argv)
   ros::Publisher class_pub = node.advertise<nav_msgs::OccupancyGrid>("/classes", 5);
   ros::Publisher bloat_pub = node.advertise<nav_msgs::OccupancyGrid>("/bloated_map", 5);
   ros::Publisher flat_pub = node.advertise<nav_msgs::OccupancyGrid>("/flat_map", 5);
+  ros::Publisher config0_pub = node.advertise<nav_msgs::OccupancyGrid>("/config0", 5);
+  ros::Publisher config10_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_0", 5);
+  ros::Publisher config11_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_1", 5);
+  ros::Publisher config12_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_2", 5);
+  ros::Publisher config13_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_3", 5);
+  
+  ros::Publisher edge1_pub = node.advertise<visualization_msgs::Marker>("/edges0", 5);
+  ros::Publisher edge2_pub = node.advertise<visualization_msgs::Marker>("/edges1", 5);
   
   ros::ServiceClient client = node.serviceClient<env_characterization::classify_map>("/classify_map");
   
@@ -308,9 +522,52 @@ int main(int argc, char** argv)
   nav_msgs::OccupancyGrid occ_grid;
   GridMapRosConverter::toOccupancyGrid(grid, "elevation", -0.5, 0.5, occ_grid);
   
+  chrono::steady_clock::time_point totStart = chrono::steady_clock::now();
+  
+  //Find flat regions in map
+  vector<int> flatMap = ClassifyFlat(occ_grid, 0, 3, 0.001);
+  
+  cout << "flatMap Size: " << flatMap.size() << endl;
+  
+  //Create selection map for classification
   int size = 12;
   
-  vector<nav_msgs::OccupancyGrid> partitions = PartitionMap(occ_grid, size);
+  vector<bool> selection;
+  
+  for (int i = size / 2; i < occ_grid.info.height - size / 2; i++)
+  {
+    for (int j = size / 2; j < occ_grid.info.width - size / 2; j++)
+    {
+      int idx = i * occ_grid.info.width + j;
+      if (flatMap[idx] == 0)
+      {
+	selection.push_back(true);
+	flatMap[idx] = 2;
+      }
+      else
+      {
+	selection.push_back(false);
+      }      
+    }
+  }
+  
+  int featCandCt = 0;
+  for (int i = 0; i < flatMap.size(); i++)
+  {
+    if (flatMap[i] == 2) featCandCt++;
+  }
+  
+  cout << "selection size, count: " << selection.size() << ", " << featCandCt << endl;
+  
+  nav_msgs::OccupancyGrid flat_msg = occ_grid;
+  flat_msg.data = {};
+  
+  for (int i = 0; i < flatMap.size(); i++)
+  {
+    flat_msg.data.push_back(flatMap[i] * 10);
+  }
+  
+  vector<nav_msgs::OccupancyGrid> partitions = PartitionMap(occ_grid, size, &selection);
   
   cout << "Partitions: " << partitions.size() << endl;
   
@@ -318,6 +575,8 @@ int main(int argc, char** argv)
   srv.request.partitions = partitions;
   
   nav_msgs::OccupancyGrid classes = occ_grid;
+  
+  cout << "occ_grid size: " << occ_grid.data.size() << endl;
   
   //int selection = 0;
   //cin >> selection;
@@ -330,18 +589,37 @@ int main(int argc, char** argv)
     if (client.call(srv))
     {
       cout << "Service Responded" << endl;
-      classes.data = srv.response.characters.data;
-      for (int i = 0; i < classes.data.size(); i++)
+      //classes.data = srv.response.characters.data;
+      
+      int featCt = 0;
+      classes.data = {};
+      for (int i = 0; i < flatMap.size(); i++)
       {
-	featureMap.push_back(classes.data[i] > 0);
-	//if (classes.data[i] != selection) classes.data[i] = 0;
-	classes.data[i] *= 10;
+	if (flatMap[i] == 2)
+	{
+	  int feat = int(srv.response.characters.data[featCt]);
+	  
+	  featureMap.push_back(feat - (feat == 0));
+	  classes.data.push_back((srv.response.characters.data[featCt]) * 10);
+	  
+	  featCt++;
+	}
+	else if (flatMap[i] == 1)
+	{
+	  featureMap.push_back(0);
+	  classes.data.push_back(100);
+	}
+	else
+	{
+	  featureMap.push_back(-1);
+	  classes.data.push_back(0);
+	}
       }
       
-      classes.info.height -= size;
+      /*classes.info.height -= size;
       classes.info.width -= size;
       classes.info.origin.position.x += size / 2 * classes.info.resolution;
-      classes.info.origin.position.y += size / 2 * classes.info.resolution;
+      classes.info.origin.position.y += size / 2 * classes.info.resolution;*/
     }
     else
     {
@@ -354,23 +632,112 @@ int main(int argc, char** argv)
   
   //Planning Graph Construction
   //Obstacle candidate list: [flat, ledge]
-  Config carCon(true, {0, 1}, 11, 5, 5);
-  Config snakeCon(false, {0, 0}, 11, 5, 7);
+  Config carCon(true, {0, 1}, {1.0, 0}, 11, 5, 5);
+  Config snakeCon(false, {0, 0}, {1.0, 3.0}, 11, 5, 7);
   vector<Config> configList = {carCon, snakeCon};
   
-  configMap planGraph = bloatMap(featureMap, classes.info.height, classes.info.width, configList, 8, 2);
+  vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
   
-  gridSubMap vizGraph = planGraph[1][0];
+  //Translate featureMap to bloatFeats
+  vector<int> bloatFeats;
+  for (int i = 0; i < featureMap.size(); i++)
+  {
+    //cout << featureMap[i] << ", ";
+    //if (featureMap[i] == 0) bloatFeats.push_back(0);
+    //else if (featureMap[i] < 0) bloatFeats.push_back(
+  }
+  
+  configMap planGraph = bloatMap(featureMap, classes.info.height, classes.info.width, configList, angles, 2);
   
   cout << "Graph Sizes: car angles " << planGraph[0].size() << "; snake angles " << planGraph[1].size() << endl;
   
+  cout << "Starting Node Graph Generation" << endl;
+  
+  vector<Node> nodeGraph;
+  configNodeMap nodeGrid;
+  
+  CreateGraph(nodeGrid, nodeGraph, planGraph, occ_grid.info.height, occ_grid.info.width, configList, angles.size());
+  
+  cout << "Finished Node Graph Creation" << endl;
+  cout << "Graph Size: " << nodeGraph.size() << endl;
+  
+  chrono::steady_clock::time_point totStop = chrono::steady_clock::now();
+  cout << "Total Processing Time: " << chrono::duration_cast<chrono::microseconds>(totStop - totStart).count() / 1000000.0 << endl;
+  
+  //Visualization Stuff
+  float res = occ_grid.info.resolution;
+  
+  visualization_msgs::Marker linez1;
+  linez1.header.frame_id = occ_grid.header.frame_id;
+  linez1.header.stamp = occ_grid.header.stamp;
+  linez1.ns = "graph_edges";
+  linez1.action = visualization_msgs::Marker::ADD;
+  
+  linez1.pose.orientation.w = 1.0;
+  
+  linez1.id = 0;
+  linez1.type = visualization_msgs::Marker::LINE_LIST;
+  
+  linez1.scale.x = 0.0006;
+  linez1.color.r = 1.0;
+  linez1.color.a = 1.0;
+  
+  nav_msgs::OccupancyGrid vizTemplate = occ_grid;
+  
+  for (int i = 0; i < vizTemplate.data.size(); i++)
+  {
+    vizTemplate.data[i] = 0;
+  }
+  
+  vector<nav_msgs::OccupancyGrid> vizMaps;
+  
+  for (int c = 0; c < configList.size(); c++)
+  {
+    for (int theta = 2 * !configList[c].omni; theta < min(6, int(nodeGrid[c].size())); theta++)
+    {
+      vizMaps.push_back(vizTemplate);
+      vizMaps.back().info.origin.position.z = (c + 1) * 0.2 + theta * 0.05;
+      
+      for (int i = 40; i < 70; i++)
+      {
+	for (int j = 30; j < 70; j++)
+	{
+	  //cout << c << ", " << theta << endl;
+	  int nodeIdx = nodeGrid[c][theta][i][j];
+	  if (nodeIdx >= 0)
+	  {
+	    (vizMaps.back()).data[i * occ_grid.info.width + j] = 10;
+	    
+	    geometry_msgs::Point p1;
+	    p1.x = nodeGraph[nodeIdx].pose.y * res + occ_grid.info.origin.position.x + res / 2;
+	    p1.y = nodeGraph[nodeIdx].pose.x * res + occ_grid.info.origin.position.y + res / 2;
+	    p1.z = (c + 1) * 0.2 + theta * 0.05;
+	    
+	    vector<int> neighbs = nodeGraph[nodeIdx].neighbs;
+	    for (int n = 0; n < neighbs.size(); n++)
+	    {
+	      geometry_msgs::Point p2;
+	      p2.x = nodeGraph[neighbs[n]].pose.y * res + occ_grid.info.origin.position.x + res / 2;
+	      p2.y = nodeGraph[neighbs[n]].pose.x * res + occ_grid.info.origin.position.y + res / 2;
+	      p2.z = (nodeGraph[neighbs[n]].config + 1) * 0.2 + theta * 0.05;
+	      
+	      linez1.points.push_back(p1);
+	      linez1.points.push_back(p2);
+	    }
+	  }
+	}
+      }
+    }
+  }
+  
+  gridSubMap vizGraph = planGraph[1][4];
   vector<int> vizBloatData;
   
   for (int i = 0; i < classes.info.height; i++)
   {
     for (int j = 0; j < classes.info.width; j++)
     {
-      vizBloatData.push_back(vizGraph[i][j][1]);
+      vizBloatData.push_back(vizGraph[i][j][0]);
     }
   }
   
@@ -391,6 +758,13 @@ int main(int argc, char** argv)
     class_pub.publish(classes);
     grid_pub.publish(grid_msg);
     bloat_pub.publish(bloat_msg);
+    flat_pub.publish(flat_msg);
+    config0_pub.publish(vizMaps[0]);
+    edge1_pub.publish(linez1);
+    config10_pub.publish(vizMaps[1]);
+    config11_pub.publish(vizMaps[2]);
+    config12_pub.publish(vizMaps[3]);
+    config13_pub.publish(vizMaps[4]);    
     
     ros::spinOnce();
     rate.sleep();

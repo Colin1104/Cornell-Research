@@ -249,10 +249,9 @@ def handle_classify_map(req):
     
     orients = []
     for jdx, q in enumerate(orient_results):
-        data.append(q["classes"])
-        orients.append(q["classes"])
+        orients.append(q["classes"] + 1)
 
-    feature_count = 0        
+    feature_count = 0
     for i in range(np.size(data, 0)):
         if data[i] > 0 and feature_count < np.size(orients, 0):
             data[i] = orients[feature_count]
