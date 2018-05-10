@@ -1,0 +1,210 @@
+<?xml version="1.0" ?>
+<robot name="My_SMORE">
+  <joint name="My_SMORE__left_wheel_hinge" type="revolute">
+    <parent link="My_SMORE__UHolderBody"/>
+    <child link="My_SMORE__LeftWheel"/>
+    <origin rpy="0 0 0" xyz="0.045 0    0.05"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="0.3" lower="-1e+16" upper="1e+16" velocity="-1.0"/>
+  </joint>
+  <joint name="My_SMORE__right_wheel_hinge" type="revolute">
+    <parent link="My_SMORE__UHolderBody"/>
+    <child link="My_SMORE__RightWheel"/>
+    <origin rpy="0       0      -3.14159" xyz="-0.045  0     0.05"/>
+    <axis xyz="-1  0  0"/>
+    <limit effort="0.3" lower="-1e+16" upper="1e+16" velocity="-1.0"/>
+  </joint>
+  <joint name="My_SMORE__front_wheel_hinge" type="revolute">
+    <parent link="My_SMORE__CircuitHolder"/>
+    <child link="My_SMORE__FrontWheel"/>
+    <origin rpy="0 0 0" xyz="0    -0.044  0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="-1.0" lower="-1e+16" upper="1e+16" velocity="-1.0"/>
+  </joint>
+  <joint name="My_SMORE__center_hinge" type="revolute">
+    <parent link="My_SMORE__UHolderBody"/>
+    <child link="My_SMORE__CircuitHolder"/>
+    <origin rpy="0 0 0" xyz="0   0   0.05"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="0.5" lower="-1.5708" upper="1.5708" velocity="-1.0"/>
+  </joint>
+  <link name="My_SMORE__CircuitHolder">
+    <inertial>
+      <mass value="0.309551"/>
+      <origin rpy="0 0 0" xyz="0      -0.00824  0"/>
+      <inertia ixx="0.000152716" ixy="0" ixz="0" iyy="0.000166672" iyz="0" izz="0.000206589"/>
+    </inertial>
+    <collision name="My_SMORE__CircuitHolder_collision">
+      <origin rpy="1.57079  0      -1.57079" xyz="0.03605  0.02985 -0.02967"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/CircuitHolderNew.STL" scale="1 1 1"/>
+      </geometry>
+    </collision>
+    <visual name="My_SMORE__CircuitHolder_visual">
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/CircuitHolder.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__CircuitKey_visual">
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/CircuitKey.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__CircuitPart_visual">
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/CircuitPart.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="My_SMORE__UHolderBody">
+    <inertial>
+      <mass value="0.37498"/>
+      <origin rpy="0 0 0" xyz="0      0.03067 0.05"/>
+      <inertia ixx="0.000545026" ixy="0" ixz="0" iyy="0.00107429" iyz="0" izz="0.00101183"/>
+    </inertial>
+    <collision name="My_SMORE__UHolderBody_collision">
+      <origin rpy="1.57079  0      -1.57079" xyz="0.04265 0.04915 0.00605"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/UHolderNew.STL" scale="1 1 1"/>
+      </geometry>
+    </collision>
+    <visual name="My_SMORE__UHolderBody_visual">
+      <origin rpy="0 0 0" xyz="0   0   0.05"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/UHolderBody.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__UMagAndGears_visual">
+      <origin rpy="0 0 0" xyz="0   0   0.05"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/UMagAndGears.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__UGreenPad_visual">
+      <origin rpy="0 0 0" xyz="0   0   0.05"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/UGreenPad.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__URedPad_visual">
+      <origin rpy="0 0 0" xyz="0   0   0.05"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/URedPad.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="My_SMORE__FrontWheel">
+    <inertial>
+      <mass value="0.045716"/>
+      <origin rpy="0 0 0" xyz="0      0.00034 0"/>
+      <inertia ixx="1.94691e-05" ixy="0" ixz="0" iyy="3.74262e-05" iyz="0" izz="1.94691e-05"/>
+    </inertial>
+    <collision name="My_SMORE__FrontWheel_collision">
+      <origin rpy="0      0      1.57079" xyz="0.04202 -0.00513 -0.04202"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/FrontWheelThin.STL" scale="1 1 1"/>
+      </geometry>
+    </collision>
+    <visual name="My_SMORE__FrontWheel_visual">
+      <origin rpy="0 0 0" xyz="0    0.044 0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/FrontWheel.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__CenterMag2_visual">
+      <origin rpy="0 0 0" xyz="0    0.044 0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/CenterMag2.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__RedPad2_visual">
+      <origin rpy="0 0 0" xyz="0    0.044 0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/RedPad2.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__GreenPad2_visual">
+      <origin rpy="0 0 0" xyz="0    0.044 0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/GreenPad2.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="My_SMORE__LeftWheel">
+    <inertial>
+      <mass value="0.0372637"/>
+      <origin rpy="0 0 0" xyz="0.00078 0      0"/>
+      <inertia ixx="3.37995e-05" ixy="0" ixz="0" iyy="1.71576e-05" iyz="0" izz="1.71576e-05"/>
+    </inertial>
+    <collision name="My_SMORE__LeftWheel_collision">
+      <origin rpy="0 0 0" xyz="-0.00188 -0.04527 -0.04527"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/MainWheelNewThick.STL" scale="1 1 1"/>
+      </geometry>
+    </collision>
+    <visual name="My_SMORE__LeftWheel_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/MainWheel.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__LeftMagneticBars_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/MagneticBars.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__LeftRedPad_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/RedPad.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__LeftGreenPad_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/GreenPad.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="My_SMORE__RightWheel">
+    <inertial>
+      <mass value="0.0372637"/>
+      <origin rpy="0 0 0" xyz="0.00078 0      0"/>
+      <inertia ixx="3.37995e-05" ixy="0" ixz="0" iyy="1.71576e-05" iyz="0" izz="1.71576e-05"/>
+    </inertial>
+    <collision name="My_SMORE__RightWheel_collision">
+      <origin rpy="0      0      3.14159" xyz="0.00412  0.04527 -0.04527"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/MainWheelNewThick.STL" scale="1 1 1"/>
+      </geometry>
+    </collision>
+    <visual name="My_SMORE__RightWheel_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/MainWheel.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__RightMagneticBars_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/MagneticBars.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__RightRedPad_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/RedPad.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <visual name="My_SMORE__RightGreenPad_visual">
+      <origin rpy="0 0 0" xyz="-0.045  0     0"/>
+      <geometry>
+        <mesh filename="package://smore_description/meshes/GreenPad.STL" scale="1 1 1"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>

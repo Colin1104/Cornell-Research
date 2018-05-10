@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<robot name="my_robot" xmlns:xacro="http://ros.org/wiki/xacro">
+    <xacro:include filename="/home/jonathan/.gazebo/models/SMORE.sdf"/>
+
+    <xacro:property name="pi" value="3.141592"/>
+
+    <!-- the robot -->
+    <xacro:My_SMORE />
+
+</robot>

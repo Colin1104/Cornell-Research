@@ -1,0 +1,3 @@
+[Project]
+Manager=KDevCMakeManager
+Name=gazebo_plugin_tutorial

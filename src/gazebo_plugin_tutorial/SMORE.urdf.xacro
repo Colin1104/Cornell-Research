@@ -1,0 +1,553 @@
+<?xml version='1.0'?>
+<robot name="SMORE" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="SMORE" >
+
+    <link name='CircuitHolder'>
+      <pose>0 0 0 0 0 0</pose>
+      <inertial>
+        <!--pose>0.00799044 -0.00824713 0.00675345 0 -0 0</pose-->
+        <pose>0 -0.00824713 0 0 0 0</pose>
+        <mass>0.309551</mass>
+        <inertia>
+          <ixx>0.000152716</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000166672</iyy>
+          <iyz>0</iyz>
+          <izz>0.000206589</izz>
+        </inertia>
+      </inertial>
+      <collision name='CircuitHolder_collision'>
+        <pose>0.03605 0.02985 -0.029675 1.5707963 0 -1.5707963</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/CircuitHolderNew.STL</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <visual name='CircuitHolder_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/CircuitHolder.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0 0 0 1</ambient>
+				</material>
+      </visual>
+      
+      <visual name='CircuitKey_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/CircuitKey.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.9098 0.4431 0.0314 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='CircuitPart_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/CircuitPart.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.956862745098039 0.956862745098039 0.956862745098039 1</ambient>
+				</material>
+      </visual>
+    </link>
+
+		<link name='UHolderBody'>
+      <pose>0 0 0 0 0 0</pose>
+			<inertial>
+        <pose>0 0.0306753 0 0 0 0</pose>
+        <mass>0.37498</mass>
+        <inertia>
+          <ixx>0.000545026</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.00107429</iyy>
+          <iyz>0</iyz>
+          <izz>0.00101183</izz>
+        </inertia>
+      </inertial>
+      <collision name='UHolderBody_collision'>
+        <pose>0.04265 0.04915 -0.04395 1.5707963 0 -1.5707963</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/UHolderNew.STL</uri>
+          </mesh>
+        </geometry>
+        <!-- The surface prperties of the U shape holder-->
+        <surface>
+          <friction>
+            <ode>
+              <mu>3.0</mu>
+              <mu2>3.0</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='UHolderBody_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/UHolderBody.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0 0 0 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='UMagAndGears_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/UMagAndGears.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.956862745098039 0.956862745098039 0.956862745098039 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='UGreenPad_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/UGreenPad.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0 1 0 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='URedPad_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/URedPad.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>1 0 0 1</ambient>
+				</material>
+      </visual>
+
+    </link>
+
+		<link name='FrontWheel'>
+      <pose>0 0 0 0 0 0</pose>
+			<inertial>
+        <pose>0 -0.0436519 0 0 0 0</pose>
+        <mass>0.045716</mass>
+        <inertia>
+          <ixx>1.94691e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>3.74262e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.94691e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='FrontWheel_collision'>
+        <pose>0.04202 -0.04913 -0.04202 0 0 1.5707963</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/FrontWheelThin.STL</uri>
+          </mesh>
+        </geometry>
+        <!-- Properties of the front wheel-->
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>1.0</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='FrontWheel_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/FrontWheel.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.7 0.7 0.7 1</ambient>
+				</material>
+      </visual>
+     
+      <visual name='CenterMag2_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/CenterMag2.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.956862745098039 0.956862745098039 0.956862745098039 1</ambient>
+				</material>
+      </visual>
+			
+      <visual name='RedPad2_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/RedPad2.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>1 0 0 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='GreenPad2_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/GreenPad2.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0 1 0 1</ambient>
+				</material>
+      </visual>
+    </link>
+
+		<link name='LeftWheel'>
+      <pose>0 0 0 0 0 0</pose>
+			<inertial>
+        <pose>0.0457825 0 0 0 -0 0</pose>
+        <mass>0.0372637</mass>
+        <inertia>
+          <ixx>3.37995e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.71576e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.71576e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='LeftWheel_collision'>
+        <pose>0.04312 -0.045275 -0.045275 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/MainWheelNewThick.STL</uri>
+          </mesh>
+        </geometry>
+        <!-- Surface Property of material -->
+        <!-- The friction coefficient is large because of the rubber band around the wheel-->
+        <surface>
+          <friction>
+            <ode>
+              <mu>10</mu>
+              <mu2>10</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='LeftWheel_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/MainWheel.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0 0.50588 1 1</ambient>
+				</material>
+      </visual>
+	
+      <visual name='LeftMagneticBars_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/MagneticBars.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.956862745098039 0.956862745098039 0.956862745098039 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='LeftRedPad_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/RedPad.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>1 0 0 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='LeftGreenPad_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/GreenPad.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0 1 0 1</ambient>
+				</material>
+      </visual>
+
+    </link>
+
+		<link name='RightWheel'>
+      <pose>0 0 0 0 0 3.141593</pose>
+			<inertial>
+        <pose>0.0457825 0 0 0 -0 0</pose>
+        <mass>0.0372637</mass>
+        <inertia>
+          <ixx>3.37995e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.71576e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.71576e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='RightWheel_collision'>
+        <pose>0.04912 0.045275 -0.045275 0 0 3.1415926</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/MainWheelNewThick.STL</uri>
+          </mesh>
+        </geometry>
+        <!-- Surface Property of material -->
+        <!-- The friction coefficient is large because of the rubber band around the wheel-->
+        <surface>
+          <friction>
+            <ode>
+              <mu>10</mu>
+              <mu2>10</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='RightWheel_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/MainWheel.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.64706 0 0 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='RightMagneticBars_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/MagneticBars.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0.956862745098039 0.956862745098039 0.956862745098039 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='RightRedPad_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/RedPad.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>1 0 0 1</ambient>
+				</material>
+      </visual>
+
+      <visual name='RightGreenPad_visual'>
+        <pose>0 0 0 0 -0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://SMORES6Uriah/meshes/GreenPad.STL</uri>
+          </mesh>
+        </geometry>
+				<material>
+					<ambient>0 1 0 1</ambient>
+				</material>
+      </visual>
+
+    </link>
+
+    <!-- Here come the joints -->
+    
+    <joint name='left_wheel_hinge' type='revolute'>
+      <parent>UHolderBody</parent>
+      <child>LeftWheel</child>
+      <pose frame=''>0.045 0 0 0 -0 0</pose>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <use_parent_model_frame>1</use_parent_model_frame>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+          <effort>0.3</effort>
+          <velocity>-1</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+          <damping>0</damping>
+          <friction>0.1</friction>
+        </dynamics>
+      </axis>
+      <physics>
+        <ode>
+          <limit>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </limit>
+          <suspension>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </suspension>
+        </ode>
+      </physics>
+    </joint>
+
+    <joint name='right_wheel_hinge' type='revolute'>
+      <parent>UHolderBody</parent>
+      <child>RightWheel</child>
+      <pose frame='LeftWheel'>0.045 0 0 0 -0 0</pose>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <use_parent_model_frame>1</use_parent_model_frame>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+          <effort>0.3</effort>
+          <velocity>-1</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+          <damping>0</damping>
+          <friction>0.1</friction>
+        </dynamics>
+      </axis>
+      <physics>
+        <ode>
+          <limit>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </limit>
+          <suspension>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </suspension>
+        </ode>
+      </physics>
+    </joint>
+
+    <joint name='front_wheel_hinge' type='revolute'>
+      <parent>CircuitHolder</parent>
+      <child>FrontWheel</child>
+      <pose frame='CricuitHolder'>0 -0.044 0 0 -0 0</pose>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <use_parent_model_frame>1</use_parent_model_frame>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+          <effort>-1</effort>
+          <velocity>-1</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+          <damping>0</damping>
+          <friction>0.1</friction>
+        </dynamics>
+      </axis>
+      <physics>
+        <ode>
+          <limit>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </limit>
+          <suspension>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </suspension>
+        </ode>
+      </physics>
+    </joint>
+
+    <joint name='center_hinge' type='revolute'>
+      <parent>UHolderBody</parent>
+      <child>CircuitHolder</child>
+      <pose frame=''>0 0 0 0 -0 0</pose>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <use_parent_model_frame>1</use_parent_model_frame>
+        <limit>
+          <lower>-1.5708</lower>
+          <upper>1.5708</upper>
+          <effort>0.5</effort>
+          <velocity>-1</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+          <damping>0</damping>
+          <friction>0.3</friction>
+        </dynamics>
+      </axis>
+      <physics>
+        <ode>
+          <limit>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </limit>
+          <suspension>
+            <cfm>0</cfm>
+            <erp>0.2</erp>
+          </suspension>
+        </ode>
+      </physics>
+    </joint>
+    <plugin name="ModelController" filename="libmodel_push.so"/>
+  </xacro:macro>
+</robot>
