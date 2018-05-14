@@ -1,0 +1,23 @@
+<?xml version='1.0'?>
+<sdf version='1.4'>
+	<model name='nest'>
+			<include>
+				<pose>0.0 0 0.05 0 0 1.5708</pose>
+				<name>SMORE_0</name>
+				<uri>model://SMORE</uri>
+	    	</include>
+
+	    	<include>
+	    		<name>SMORE_1</name>
+	    		<pose>0.1 0 0.05 0 0 0</pose>
+	    		<uri>model://SMORE</uri>
+    		</include>
+
+    		<joint name="test" type="fixed">
+    			<parent>SMORE_0::FrontWheel</parent>
+    			<child>SMORE_1::UHolderBody</child>
+    		</joint>
+
+    <!-- <plugin name="ModelController" filename="libmodel_push.so"/> -->
+    </model>
+</sdf>

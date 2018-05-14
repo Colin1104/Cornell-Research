@@ -1,0 +1,85 @@
+<?xml version='1.0'?>
+<sdf version='1.4'>
+	<model name='nest'>
+		<model name='SMORE0'>
+			<pose>0 0 0 0 0 0</pose>
+			<include>
+				<uri>model://SMORE</uri>
+	    	</include>
+	    </model>
+
+	    <model name='SMORE_F'>
+	    	<pose>0.1 0 0 0 0 0</pose>
+			<include>
+				<uri>model://SMORE</uri>
+	    	</include>
+	    </model>
+
+	    <model name='SMORE_FL'>
+	    	<pose>0.1 0.1 0 0 0 1.5708</pose>
+			<include>
+				<uri>model://SMORE</uri>
+	    	</include>
+	    </model>
+
+	    <model name='SMORE_FR'>
+	    	<pose>0.1 -0.1 0 0 0 -1.5708</pose>
+			<include>
+				<uri>model://SMORE</uri>
+	    	</include>
+	    </model>
+
+	    <model name='SMORE_B'>
+	    	<pose>-0.1 0 0 0 0 0</pose>
+			<include>
+				<uri>model://SMORE</uri>
+	    	</include>
+	    </model>
+
+	    <model name='SMORE_BL'>
+	    	<pose>-0.1 0.1 0 0 0 1.5708</pose>
+			<include>
+				<uri>model://SMORE</uri>
+	    	</include>
+	    </model>
+
+	    <model name='SMORE_BR'>
+	    	<pose>-0.1 -0.1 0 0 0 -1.5708</pose>
+			<include>
+				<uri>model://SMORE</uri>
+	    	</include>
+	    </model>
+
+	    <joint name="joint0_F" type="fixed">
+	    	<parent>SMORE0::SMORE::FrontWheel</parent>
+	    	<child>SMORE_F::SMORE::UHolderBody</child>
+	    </joint>
+
+	    <joint name="jointF_FL" type="fixed">
+	    	<parent>SMORE_F::SMORE::LeftWheel</parent>
+	    	<child>SMORE_FL::SMORE::UHolderBody</child>
+	    </joint>
+
+	    <joint name="jointF_FR" type="fixed">
+	    	<parent>SMORE_F::SMORE::RightWheel</parent>
+	    	<child>SMORE_FR::SMORE::UHolderBody</child>
+	    </joint>
+
+	    <joint name="joint0_B" type="fixed">
+	    	<parent>SMORE0::SMORE::UHolderBody</parent>
+	    	<child>SMORE_B::SMORE::FrontWheel</child>
+	    </joint>
+
+	    <joint name="jointB_BL" type="fixed">
+	    	<parent>SMORE_B::SMORE::LeftWheel</parent>
+	    	<child>SMORE_BL::SMORE::UHolderBody</child>
+	    </joint>
+
+	    <joint name="jointB_BR" type="fixed">
+	    	<parent>SMORE_B::SMORE::RightWheel</parent>
+	    	<child>SMORE_BR::SMORE::UHolderBody</child>
+	    </joint>
+
+    <plugin name="CarController" filename="libcar_control.so"/>
+    </model>
+</sdf>
