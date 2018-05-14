@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <bits/stdc++.h>
+#include <queue>
 
 #include <grid_map_ros/grid_map_ros.hpp>
 #include <grid_map_msgs/GridMap.h>
@@ -14,6 +15,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <visualization_msgs/Marker.h>
+#include <nav_msgs/Path.h>
 
 #include <octomap/octomap.h>
 #include <octomap_msgs/Octomap.h>
@@ -86,6 +88,7 @@ public:
   {
     this->omni = omni;
     this->obs = obs;
+    this->costs = costs;
     this->w = w;
     this->h = h;
     this->r = r;
@@ -142,25 +145,70 @@ public:
     
     return acts;
   }
-  
-  float getCost(vector<bool> feat1, vector<bool> feat2)
-  {
-    
-  }
 };
 
 class Node
 {
 public:
   Pose pose;
-  Config config;
+  int config;
+  Node* parent;
+  float cost;
   vector<int> neighbs;
+  vector<float> edgeCosts;
   
-  Node(Pose pose, Config config, vector<int> neighbs)
+  Node(Pose pose, int config)
+  {
+    this->pose = pose;
+    this->config = config;
+    cost = numeric_limits<float>::infinity();
+    parent = NULL;
+  }
+  
+  Node(Pose pose, int config, vector<int> neighbs, vector<float> edgeCosts)
   {
     this->pose = pose;
     this->config = config;
     this->neighbs = neighbs;
+    this->edgeCosts = edgeCosts;
+    cost = numeric_limits<float>::infinity();
+    parent = NULL;
+  }
+};
+
+class pathNode
+{
+public:
+  int id;
+  float cost;
+  int pID;
+  
+  pathNode()
+  {
+    id = -1;
+    cost = numeric_limits<float>::infinity();
+    pID = -1;
+  }
+  
+  pathNode(int id)
+  {
+    this->id = id;
+    cost = numeric_limits<float>::infinity();
+    pID = -1;
+  }
+  
+  pathNode(int id, float cost)
+  {
+    this->id = id;
+    this->cost = cost;
+    this->pID = -1;
+  }
+  
+  pathNode(int id, int pID, float cost)
+  {
+    this->id = id;
+    this->cost = cost;
+    this->pID = pID;
   }
 };
 
@@ -327,16 +375,18 @@ void bloatFoot(gridSubMap &grid, int cogY, int cogX, int w, int h, float theta, 
   }
 }
 
-configMap bloatMap(const vector<int> &data, int height, int width, const vector<Config> &configs, vector<float> angles, int nFeats)
+configMap bloatMap(const vector<int> &data, int height, int width, const vector<Config> &configs, vector<float> angles, int nFeats, int reconRad)
 {
   //Init config-space map
   configMap planGraph;
   
-  for (int c = 0; c < configs.size(); c++)
+  for (int c = 0; c <= configs.size(); c++)
   {
-    int angleSize = configs[c].omni + angles.size() * !configs[c].omni;
+    int angleSize = 1;
+    if (c < configs.size() && !configs[c].omni) angleSize = angles.size();
+    
     planGraph.push_back(
-      thetaSubMap(angleSize, gridSubMap(height, vector<vector<bool>>(width, vector<bool>(nFeats, 0)))));
+      thetaSubMap(angleSize, gridSubMap(height, vector<vector<bool>>(width, vector<bool>(nFeats + 1, 0)))));
   }
   
   //Iterate over cells
@@ -345,13 +395,30 @@ configMap bloatMap(const vector<int> &data, int height, int width, const vector<
     for (int j = 0; j < width; j++)
     {
       int feature = data[i * width + j];
-      if (feature == 0) continue;
+      
+      //if (feature == 0) continue;
+      
       //Iterate over configs
-      for (int c = 0; c < configs.size(); c++)
+      for (int c = 0; c < configs.size() + 1; c++)
       {
+	if (c == configs.size())
+	{
+	  if (feature == 0) break;
+	  
+	  bloatRadius(planGraph[c][0], i, j, reconRad, 0);
+	  break;
+	}
+	
 	Config conf = configs[c];
-	int bloatFeat = !conf.obs[(feature > 0)] * !(feature < 0);
-	if (conf.omni)
+	
+	int bloatFeat = (feature > 0) + 1;
+	if (conf.obs[feature > 0] || feature < 0) bloatFeat = 0;
+	
+	if (c == configs.size())
+	{
+	  bloatRadius(planGraph[c][0], i, j, conf.r, bloatFeat);
+	}
+	else if (conf.omni)
 	{
 	  bloatRadius(planGraph[c][0], i, j, conf.r, bloatFeat);
 	}
@@ -390,22 +457,13 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 	  vector<bool> bloatFeats = bloatedMap[c][theta][i][j];
 	  if (!bloatFeats[0])
 	  {
-	    graph.push_back(Node(Pose(i, j, theta), configs[c], vector<int>(0)));
+	    graph.push_back(Node(Pose(i, j, theta), c));
 	    graphGrid[c][theta][i][j] = pointer++;
 	  }
 	}
       }
     }
   }
-  
-  /*graph[0].pose.x = 17;
-  cout << graph[0].pose.x << ", " << graph[0].pose.y << ", " << graph[0].pose.theta << endl;
-  int idx = graphGrid[0][0][0][0];
-  cout << graph[idx].pose.x << ", " << graph[idx].pose.y << ", " << graph[idx].pose.theta << endl;
-  
-  graph[idx].pose.x = 130;
-  cout << graph[0].pose.x << ", " << graph[0].pose.y << ", " << graph[0].pose.theta << endl;
-  graph[idx].neighbs.push_back(-1);*/
   
   cout << "Sizes: " << graphGrid[1].size() << endl;
   
@@ -432,27 +490,83 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 	      
 	      if (th >= 0 && th < graphGrid[c].size() && y >= 0 && y < graphGrid[c][th].size() && x >= 0 && x < graphGrid[c][th][y].size())
 	      {
-		int neighbIdx = graphGrid[c][theta][y][x];
+		int neighbIdx = graphGrid[c][th][y][x];
 		
 		if (neighbIdx >= 0)
 		{
 		  graph[nodeIdx].neighbs.push_back(neighbIdx);
+		  
+		  float length = sqrt(pow(actions[a].x, 2) + pow(actions[a].y, 2));
+		  
+		  float maxCost = 0;
+		  for (int f = 1; f < bloatedMap[c][theta][i][j].size(); f++)
+		  {
+		    if (bloatedMap[c][theta][i][j][f] || bloatedMap[c][th][y][x][f])
+		    {
+		      maxCost = max(maxCost, configs[c].costs[f - 1]);
+		    }
+		  }
+		  
+		  graph[nodeIdx].edgeCosts.push_back(maxCost * length);
 		}
 	      }
 	    }
 	    
-	    for (int nC = 0; nC < configs.size(); nC++)
+	    //If reconf, connect config neighbs
+	    if (!bloatedMap[configs.size()][0][i][j][0])
 	    {
-	      int nTheta = !configs[nC].omni * theta;
-	      int neighbIdx = graphGrid[nC][nTheta][i][j];
-	      
-	      if (neighbIdx >= 0)
+	      for (int nC = 0; nC < configs.size(); nC++)
 	      {
-		graph[nodeIdx].neighbs.push_back(neighbIdx);
+		if (nC == c) continue;
+		
+		for (int nTh = 0; nTh < graphGrid[nC].size(); nTh++)
+		{
+		  int neighbIdx = graphGrid[nC][nTh][i][j];
+		  
+		  if (neighbIdx >= 0)
+		  {
+		    graph[nodeIdx].neighbs.push_back(neighbIdx);
+		    graph[nodeIdx].edgeCosts.push_back(50.0);
+		  }
+		}
 	      }
 	    }
 	  }
 	}
+      }
+    }
+  }
+}
+
+struct nodeCompare
+{
+  bool operator()(Node* lhs, Node* rhs)
+  {
+    return lhs->cost > rhs->cost;
+  }
+};
+
+void planPath(vector<Node> &nodeGraph, Node* start, Node* goal=NULL)
+{
+  priority_queue<Node*, vector<Node*>, nodeCompare> pq;
+  
+  start->cost = 0;
+  pq.push(start);
+  
+  while (!pq.empty())
+  {
+    Node* minNode = pq.top();
+    pq.pop();
+    
+    for (int i = 0; i < minNode->neighbs.size(); i++)
+    {
+      Node* neighb = &nodeGraph[minNode->neighbs[i]];
+      if (minNode->cost + minNode->edgeCosts[i] < neighb->cost)
+      {
+	neighb->cost = minNode->cost + minNode->edgeCosts[i];
+	neighb->parent = minNode;
+	
+	pq.push(neighb);
       }
     }
   }
@@ -473,14 +587,22 @@ int main(int argc, char** argv)
   ros::Publisher class_pub = node.advertise<nav_msgs::OccupancyGrid>("/classes", 5);
   ros::Publisher bloat_pub = node.advertise<nav_msgs::OccupancyGrid>("/bloated_map", 5);
   ros::Publisher flat_pub = node.advertise<nav_msgs::OccupancyGrid>("/flat_map", 5);
+  ros::Publisher cost_pub = node.advertise<nav_msgs::OccupancyGrid>("/cost_map", 5);
+  
   ros::Publisher config0_pub = node.advertise<nav_msgs::OccupancyGrid>("/config0", 5);
   ros::Publisher config10_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_0", 5);
   ros::Publisher config11_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_1", 5);
   ros::Publisher config12_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_2", 5);
   ros::Publisher config13_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_3", 5);
   
-  ros::Publisher edge1_pub = node.advertise<visualization_msgs::Marker>("/edges0", 5);
-  ros::Publisher edge2_pub = node.advertise<visualization_msgs::Marker>("/edges1", 5);
+  ros::Publisher edge0_pub = node.advertise<visualization_msgs::Marker>("/edges0", 5);
+  ros::Publisher edge10_pub = node.advertise<visualization_msgs::Marker>("/edges1_0", 5);
+  ros::Publisher edge11_pub = node.advertise<visualization_msgs::Marker>("/edges1_1", 5);
+  ros::Publisher edge12_pub = node.advertise<visualization_msgs::Marker>("/edges1_2", 5);
+  ros::Publisher edge13_pub = node.advertise<visualization_msgs::Marker>("/edges1_3", 5);
+  ros::Publisher edgeC_pub = node.advertise<visualization_msgs::Marker>("/edgesC", 5);
+  ros::Publisher path_viz_pub = node.advertise<visualization_msgs::Marker>("/path_viz", 5);
+  ros::Publisher path_pub = node.advertise<nav_msgs::Path>("/path", 5);
   
   ros::ServiceClient client = node.serviceClient<env_characterization::classify_map>("/classify_map");
   
@@ -632,8 +754,8 @@ int main(int argc, char** argv)
   
   //Planning Graph Construction
   //Obstacle candidate list: [flat, ledge]
-  Config carCon(true, {0, 1}, {1.0, 0}, 11, 5, 5);
-  Config snakeCon(false, {0, 0}, {1.0, 3.0}, 11, 5, 7);
+  Config carCon(true, {0, 1}, {1.0, numeric_limits<float>::infinity()}, 11, 5, 5);
+  Config snakeCon(false, {0, 0}, {1.0, 2.0}, 11, 5, 7);
   vector<Config> configList = {carCon, snakeCon};
   
   vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
@@ -647,7 +769,8 @@ int main(int argc, char** argv)
     //else if (featureMap[i] < 0) bloatFeats.push_back(
   }
   
-  configMap planGraph = bloatMap(featureMap, classes.info.height, classes.info.width, configList, angles, 2);
+  int reconRad = 12;
+  configMap planGraph = bloatMap(featureMap, classes.info.height, classes.info.width, configList, angles, 2, reconRad);
   
   cout << "Graph Sizes: car angles " << planGraph[0].size() << "; snake angles " << planGraph[1].size() << endl;
   
@@ -661,26 +784,127 @@ int main(int argc, char** argv)
   cout << "Finished Node Graph Creation" << endl;
   cout << "Graph Size: " << nodeGraph.size() << endl;
   
+  cout << "Begin Dijkstra Path Planning" << endl;
+  
+  //Dijkstra Path Planning
+  Node* startNode = &nodeGraph[nodeGrid[0][0][30][10]];
+  planPath(nodeGraph, startNode);
+  
+  cout << "Finished Path Planning" << endl;
+  
   chrono::steady_clock::time_point totStop = chrono::steady_clock::now();
   cout << "Total Processing Time: " << chrono::duration_cast<chrono::microseconds>(totStop - totStart).count() / 1000000.0 << endl;
   
-  //Visualization Stuff
   float res = occ_grid.info.resolution;
   
-  visualization_msgs::Marker linez1;
-  linez1.header.frame_id = occ_grid.header.frame_id;
-  linez1.header.stamp = occ_grid.header.stamp;
-  linez1.ns = "graph_edges";
-  linez1.action = visualization_msgs::Marker::ADD;
+  //Publish path msg
+  nav_msgs::Path path;
+  path.header.frame_id = "map";
   
-  linez1.pose.orientation.w = 1.0;
+  cout << occ_grid.info.origin.position.y << endl;
+  Node* goalNode = &nodeGraph[nodeGrid[1][6][49][62]];
+  Node* curParent = goalNode->parent;
   
-  linez1.id = 0;
-  linez1.type = visualization_msgs::Marker::LINE_LIST;
+  geometry_msgs::PoseStamped waypt;
+  waypt.pose.position.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+  waypt.pose.position.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+  waypt.pose.position.z = (goalNode->config) * 0.02 + goalNode->pose.theta * 0.01;
+  path.poses.push_back(waypt);
   
-  linez1.scale.x = 0.0006;
-  linez1.color.r = 1.0;
-  linez1.color.a = 1.0;
+  cout << goalNode->pose.x << ", " << goalNode->pose.y << " : " << goalNode->config << endl;
+  cout << "Cost: " << goalNode->cost << endl;
+  while (curParent != NULL)
+  {
+    //cout << curParent->pose.x << ", " << curParent->pose.y << " : " << curParent->config << endl;
+    
+    waypt.pose.position.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+    waypt.pose.position.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+    waypt.pose.position.z = (curParent->config) * 0.02 + curParent->pose.theta * 0.01;
+    path.poses.push_back(waypt);
+    
+    curParent = curParent->parent;
+  }
+  
+  //Visualization Stuff
+  
+  //Visualize path cost
+  nav_msgs::OccupancyGrid costMap = occ_grid;
+  vector<float> costVec;
+  
+  float maxCost = 0;
+  for (int i = 0; i < costMap.info.height; i++)
+  {
+    for (int j = 0; j < costMap.info.width; j++)
+    {
+      /*int idx = nodeGrid[0][0][i][j];
+      if (idx >= 0)
+      {
+	costVec.push_back(nodeGraph[idx].cost);
+	//costMap.data[i * costMap.info.width + j] = nodeGraph[idx].cost;
+	if (nodeGraph[idx].cost < numeric_limits<float>::infinity())
+	{
+	  maxCost = max(maxCost, nodeGraph[idx].cost);
+	}
+
+      }
+      else
+      {
+	costVec.push_back(-1);
+      }*/
+      
+      float minCost = numeric_limits<float>::infinity();
+      for (int c = 0; c < configList.size(); c++)
+      {
+	for (int theta = 0; theta < nodeGrid[c].size(); theta++)
+	{
+	  int idx = nodeGrid[c][theta][i][j];
+	  if (idx >= 0) minCost = min(nodeGraph[idx].cost, minCost);
+	}
+      }
+      
+      if (minCost < numeric_limits<float>::infinity())
+      {
+	costVec.push_back(minCost);
+	maxCost = max(maxCost, minCost);
+      }
+      else
+      {
+	costVec.push_back(-1);
+      }
+    }
+  }
+  
+  for (int i = 0; i < costVec.size(); i++)
+  {
+    if (costVec[i] >= 0)
+    {
+      costMap.data[i] = int(costVec[i] / maxCost * 90);
+    }
+    else
+    {
+      costMap.data[i] = 0;
+    }
+  }
+  
+  //Visualize Planning Graph
+  visualization_msgs::Marker lineTemp;
+  lineTemp.header.frame_id = occ_grid.header.frame_id;
+  lineTemp.header.stamp = occ_grid.header.stamp;
+  lineTemp.ns = "graph_edges";
+  lineTemp.action = visualization_msgs::Marker::ADD;
+  
+  lineTemp.pose.orientation.w = 1.0;
+  
+  lineTemp.id = 0;
+  lineTemp.type = visualization_msgs::Marker::LINE_LIST;
+  
+  lineTemp.scale.x = 0.0006;
+  lineTemp.color.r = 1.0;
+  lineTemp.color.a = 1.0;
+  
+  visualization_msgs::Marker lineC = lineTemp;
+  lineC.color.g = 1.0;
+  vector<visualization_msgs::Marker> linez;
   
   nav_msgs::OccupancyGrid vizTemplate = occ_grid;
   
@@ -697,6 +921,13 @@ int main(int argc, char** argv)
     {
       vizMaps.push_back(vizTemplate);
       vizMaps.back().info.origin.position.z = (c + 1) * 0.2 + theta * 0.05;
+      
+      lineTemp.id = linez.size() + 1;
+      lineTemp.color.r = (c == 0) * 1.0;
+      lineTemp.color.g = (c == 1) * 1.0;
+      lineTemp.color.b = (c == 2) * 1.0;
+      
+      linez.push_back(lineTemp);
       
       for (int i = 40; i < 70; i++)
       {
@@ -719,10 +950,21 @@ int main(int argc, char** argv)
 	      geometry_msgs::Point p2;
 	      p2.x = nodeGraph[neighbs[n]].pose.y * res + occ_grid.info.origin.position.x + res / 2;
 	      p2.y = nodeGraph[neighbs[n]].pose.x * res + occ_grid.info.origin.position.y + res / 2;
-	      p2.z = (nodeGraph[neighbs[n]].config + 1) * 0.2 + theta * 0.05;
+	      p2.z = (nodeGraph[neighbs[n]].config + 1) * 0.2 + nodeGraph[neighbs[n]].pose.theta * 0.05;
 	      
-	      linez1.points.push_back(p1);
-	      linez1.points.push_back(p2);
+	      if (nodeGraph[neighbs[n]].config != c)
+	      {
+		if (nodeGraph[neighbs[n]].pose.theta >= 2 && nodeGraph[neighbs[n]].pose.theta < 6)
+		{
+		  lineC.points.push_back(p1);
+		  lineC.points.push_back(p2);
+		}
+	      }
+	      else
+	      {
+		linez.back().points.push_back(p1);
+		linez.back().points.push_back(p2);
+	      }
 	    }
 	  }
 	}
@@ -730,7 +972,60 @@ int main(int argc, char** argv)
     }
   }
   
-  gridSubMap vizGraph = planGraph[1][4];
+  //Visualize Path
+  visualization_msgs::Marker pathLine = lineTemp;
+  pathLine.id = linez.size() + 2;
+  pathLine.color.r = 1.0;
+  pathLine.color.g = 1.0;
+  pathLine.color.b = 1.0;
+  pathLine.scale.x = 0.001;
+  
+  cout << occ_grid.info.origin.position.y << endl;
+  curParent = goalNode->parent;
+  
+  geometry_msgs::Point p;
+  p.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+  p.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+  p.z = (goalNode->config) * 0.02 + goalNode->pose.theta * 0.01;
+  
+  cout << goalNode->pose.x << ", " << goalNode->pose.y << " : " << goalNode->config << endl;
+  cout << "Cost: " << goalNode->cost << endl;
+  while (curParent != NULL)
+  {
+    //cout << curParent->pose.x << ", " << curParent->pose.y << " : " << curParent->config << endl;
+    
+    pathLine.points.push_back(p);
+    p.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+    p.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+    p.z = (curParent->config) * 0.02 + curParent->pose.theta * 0.01;
+    pathLine.points.push_back(p);
+    
+    curParent = curParent->parent;
+  }
+  
+  goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
+  curParent = goalNode->parent;
+  
+  p.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+  p.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+  p.z = (goalNode->config) * 0.02 + goalNode->pose.theta * 0.01;
+  
+  cout << goalNode->pose.x << ", " << goalNode->pose.y << " : " << goalNode->config << endl;
+  cout << "Cost: " << goalNode->cost << endl;
+  while (curParent != NULL)
+  {
+    //cout << curParent->pose.x << ", " << curParent->pose.y << " : " << curParent->config << endl;
+    
+    pathLine.points.push_back(p);
+    p.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+    p.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+    p.z = (curParent->config) * 0.02 + curParent->pose.theta * 0.01;
+    pathLine.points.push_back(p);
+    
+    curParent = curParent->parent;
+  }
+  
+  gridSubMap vizGraph = planGraph[0][0];
   vector<int> vizBloatData;
   
   for (int i = 0; i < classes.info.height; i++)
@@ -759,12 +1054,23 @@ int main(int argc, char** argv)
     grid_pub.publish(grid_msg);
     bloat_pub.publish(bloat_msg);
     flat_pub.publish(flat_msg);
+    cost_pub.publish(costMap);
+    
     config0_pub.publish(vizMaps[0]);
-    edge1_pub.publish(linez1);
     config10_pub.publish(vizMaps[1]);
     config11_pub.publish(vizMaps[2]);
     config12_pub.publish(vizMaps[3]);
-    config13_pub.publish(vizMaps[4]);    
+    config13_pub.publish(vizMaps[4]);
+    
+    edge0_pub.publish(linez[0]);
+    edge10_pub.publish(linez[1]);
+    edge11_pub.publish(linez[2]);
+    edge12_pub.publish(linez[3]);
+    edge13_pub.publish(linez[4]);
+    edgeC_pub.publish(lineC);
+    
+    path_viz_pub.publish(pathLine);
+    path_pub.publish(path);
     
     ros::spinOnce();
     rate.sleep();

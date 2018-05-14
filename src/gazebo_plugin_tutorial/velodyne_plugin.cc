@@ -31,8 +31,8 @@ namespace gazebo
       // Safety check
       if (_model->GetJointCount() == 0)
       {
-	std::cerr << "Invalid joint count, Velodyne plugin not loaded\n";
-	return;
+        std::cerr << "Invalid joint count, Velodyne plugin not loaded\n";
+        return;
       }
 
       // Store the model pointer for convenience.
@@ -47,56 +47,56 @@ namespace gazebo
 
       // Apply the P-controller to the joint.
       this->model->GetJointController()->SetVelocityPID(
-	  this->joint->GetScopedName(), this->pid);
-      
+          this->joint->GetScopedName(), this->pid);
+
       // Default to zero velocity
       double velocity = 0;
 
       // Check that the velocity element exists, then read the value
       if (_sdf->HasElement("velocity"))
-	velocity = _sdf->Get<double>("velocity");
+        velocity = _sdf->Get<double>("velocity");
 
-      // Set the joint's target velocity. This target velocity is just
-      // for demonstration purposes.
-      this->model->GetJointController()->SetVelocityTarget(
-	  this->joint->GetScopedName(), velocity);
-      
+      this->SetVelocity(velocity);
+
+      // Create the node
       this->node = transport::NodePtr(new transport::Node());
       #if GAZEBO_MAJOR_VERSION < 8
       this->node->Init(this->model->GetWorld()->GetName());
       #else
       this->node->Init(this->model->GetWorld()->Name());
       #endif
-      
-      //Create a topic name
+
+      // Create a topic name
       std::string topicName = "~/" + this->model->GetName() + "/vel_cmd";
-      
-      //Subscribe to the topic, and register a callback
+
+      // Subscribe to the topic, and register a callback
       this->sub = this->node->Subscribe(topicName,
-					&VelodynePlugin::OnMsg, this);
+         &VelodynePlugin::OnMsg, this);
       
+      // Initialize ros, if it has not already bee initialized.
       if (!ros::isInitialized())
       {
 	int argc = 0;
-	char ** argv = NULL;
+	char **argv = NULL;
 	ros::init(argc, argv, "gazebo_client",
-		  ros::init_options::NoSigintHandler);
+	    ros::init_options::NoSigintHandler);
       }
-      
-      // Create our ROS node. This acts in a similar manner to the Gazebo node
+
+      // Create our ROS node. This acts in a similar manner to
+      // the Gazebo node
       this->rosNode.reset(new ros::NodeHandle("gazebo_client"));
-      
+
       // Create a named topic, and subscribe to it.
-      ros::SubscribeOptions so = 
-      ros::SubscribeOptions::create<std_msgs::Float32>(
-	"/" + this->model->GetName() + "/vel_cmd",
-	1,
-	boost::bind(&VelodynePlugin::OnRosMsg, this, _1),
-	ros::VoidPtr(), &this->rosQueue);
+      ros::SubscribeOptions so =
+	ros::SubscribeOptions::create<std_msgs::Float32>(
+	    "/" + this->model->GetName() + "/vel_cmd",
+	    1,
+	    boost::bind(&VelodynePlugin::OnRosMsg, this, _1),
+	    ros::VoidPtr(), &this->rosQueue);
       this->rosSub = this->rosNode->subscribe(so);
-      
+
       // Spin up the queue helper thread.
-      this->rosQueueThread = 
+      this->rosQueueThread =
 	std::thread(std::bind(&VelodynePlugin::QueueThread, this));
     }
     

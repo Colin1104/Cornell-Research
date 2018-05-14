@@ -20,10 +20,10 @@ namespace gazebo
 	std::cerr << "Invalid joint count, Velodyne plugin not loaded\n";
 	return;
       }
-
+      
       // Store the model pointer for convenience.
       this->model = _model;
-
+      
       // Get the first joint. We are making an assumption about the model
       // having one joint that is the rotational joint.
       this->joint = _model->GetJoints()[0];
@@ -31,7 +31,8 @@ namespace gazebo
       cout << "Joint name: " << this->joint->GetScopedName() << endl;
 
       // Setup a P-controller, with a gain of 0.1.
-      //this->pid = common::PID(0.001, 0.001, 0.003);
+      this->pid = common::PID(1, 0.1, 0.3, 1.0, -1.0);
+      cout << "IMax: " << this->pid.GetIMax() << endl;
 
       // Apply the P-controller to the joint.
       //this->model->GetJointController()->SetVelocityPID(this->model->GetJoints()[0]->GetScopedName(), this->pid);
@@ -66,10 +67,10 @@ namespace gazebo
 	  this->jointController->AddJoint(this->model->GetJoint(tilt));
           this->jointController->SetVelocityPID(name1, common::PID(0.5, 0.1, 0.0));
 	  this->jointController->SetVelocityPID(name2, common::PID(0.5, 0.1, 0.0));
-	  this->jointController->SetPositionPID(tilt, common::PID(5, 0.1, 0.0));
-	  this->jointController->SetVelocityTarget(name1, 2.0);
-	  this->jointController->SetVelocityTarget(name2, 2.0);
-	  this->jointController->SetPositionTarget(tilt, -1.0);
+	  this->jointController->SetPositionPID(tilt, this->pid);
+	  //this->jointController->SetVelocityTarget(name1, 0.0);
+	  //this->jointController->SetVelocityTarget(name2, 0.0);
+	  this->jointController->SetPositionTarget(tilt, 0.5);
         }
         else if (update_num < 10000)
         {

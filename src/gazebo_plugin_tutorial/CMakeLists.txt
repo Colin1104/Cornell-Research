@@ -22,6 +22,9 @@ target_link_libraries(velodyne_plugin ${GAZEBO_libraries} ${roscpp_LIBRARIES})
 add_library(master_plugin SHARED master_plugin.cc)
 target_link_libraries(master_plugin ${GAZEBO_libraries} ${roscpp_LIBRARIES})
 
+add_library(car_control SHARED car_control.cc)
+target_link_libraries(car_control ${GAZEBO_LIBRARIES})
+
 # Build the stand-alone test program
 add_executable(vel vel.cc)
 

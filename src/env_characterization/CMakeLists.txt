@@ -87,6 +87,21 @@ add_executable(
   src/env_characterization.cpp
 )
 
+add_executable(
+  sim_handler
+  src/sim_handler.cpp
+)
+
+add_executable(
+  gazebo_tf
+  src/gazebo_tf.cpp
+)
+
+add_executable(
+  navigation
+  src/navigation.cpp
+)
+
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
   example_generation
@@ -95,6 +110,21 @@ target_link_libraries(
 
 target_link_libraries(
   env_characterization
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(
+  sim_handler
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(
+  gazebo_tf
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(
+  navigation
   ${catkin_LIBRARIES}
 )
 

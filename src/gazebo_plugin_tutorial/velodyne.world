@@ -11,13 +11,13 @@
     </include>
 
     <!-- A testing model that includes the Velodyne sensor model -->
-    <model name="my_SMORE">
+    <model name="nest">
       <include>
-        <uri>model://My_SMORE</uri>
+        <uri>model://smore_nest</uri>
       </include>
 
       <!-- Attach the plugin to this model -->
-      <plugin name="velodyne_control" filename="libvelodyne_plugin.so">
+      <plugin name="velodyne_control" filename="libcar_control.so">
 		<velocity>5</velocity>
       </plugin>
     </model>
