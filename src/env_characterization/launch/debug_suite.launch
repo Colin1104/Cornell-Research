@@ -1,0 +1,9 @@
+<launch>
+	<node pkg="env_characterization" type="cnn_characterization_v3.py" name="CNN_Classifier" />
+
+	<node pkg="env_characterization" type="env_characterization" name="Env_Characterization" />
+
+	<!-- <node pkg="env_characterization" type="navigation" name="Navigation" /> -->
+
+	<node pkg="env_characterization" type="gazebo_tf" name="Gazeo_TF" />
+</launch>

@@ -1,0 +1,1 @@
+env_characterization/PathNode[] path
