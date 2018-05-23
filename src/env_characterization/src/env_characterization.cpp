@@ -16,16 +16,23 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <visualization_msgs/Marker.h>
 #include <nav_msgs/Path.h>
+#include <std_msgs/Int32.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <geometry_msgs/Pose.h>
 
 #include <octomap/octomap.h>
 #include <octomap_msgs/Octomap.h>
 //#include <octomap_msgs/conversions.h>
 #include <octomap_ros/conversions.h>
+#include <octomap/OcTreeIterator.hxx>
 
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
 
 #include <env_characterization/classify_map.h>
+#include <env_characterization/PathNode.h>
+#include <env_characterization/PathNodeArray.h>
+#include <env_characterization/Feature.h>
 
 #include <cmath>
 #include <ctime>
@@ -39,6 +46,7 @@ typedef vector<gridSubMap> thetaSubMap;
 typedef vector<thetaSubMap> configMap;
 
 grid_map_msgs::GridMap grid_msg;
+GridMap* gridPtr;
 
 octomap::Pointcloud octomap_cloud;
 sensor_msgs::PointCloud2 cloud;
@@ -77,14 +85,14 @@ public:
 class Config
 {
 public:
-  bool omni;		//Is config steerable?
-  vector<bool> obs;	//Obstacle status for each feature, starting with flat
-  vector<float> costs;	//List of costs for each feature
-  int w;		//Width of robot footprint
-  int h;		//Height of robot footprint
-  int r;		//Radius of robot footprint (omni)
+  bool omni;			//Is config steerable?
+  vector<bool> obs;		//Obstacle status for each feature, starting with flat
+  vector<vector<float>> costs;	//List of costs for each [action, feature]
+  int w;			//Width of robot footprint
+  int h;			//Height of robot footprint
+  int r;			//Radius of robot footprint (omni)
   
-  Config(bool omni, vector<bool> obs, vector<float> costs, int h, int w, int r)
+  Config(bool omni, vector<bool> obs, vector<vector<float>> costs, int h, int w, int r)
   {
     this->omni = omni;
     this->obs = obs;
@@ -114,28 +122,28 @@ public:
       switch (theta)
       {
 	case 0:
-	  acts = {Pose(-1, 0, 0), Pose(1, 0, 0)};
+	  acts = {Pose(-1, 0, 0), Pose(1, 0, 0)};//, Pose(-5, 0, 0), Pose(5, 0, 0)};
 	  break;
 	case 1:
-	  acts = {Pose(-2, -1, 1), Pose(2, 1, 1)};
+	  acts = {Pose(-2, -1, 1), Pose(2, 1, 1)};//, Pose(-4, -2, 1), Pose(4, 2, 1)};
 	  break;
 	case 2:
-	  acts = {Pose(-1, -1, 2), Pose(1, 1, 2)};
+	  acts = {Pose(-1, -1, 2), Pose(1, 1, 2)};//, Pose(-4, -4, 2), Pose(4, 4, 2)};
 	  break;
 	case 3:
-	  acts = {Pose(-1, -2, 3), Pose(1, 2, 3)};
+	  acts = {Pose(-1, -2, 3), Pose(1, 2, 3)};//, Pose(-2, -4, 3), Pose(2, 4, 3)};
 	  break;
 	case 4:
-	  acts = {Pose(0, -1, 4), Pose(0, 1, 4)};
+	  acts = {Pose(0, -1, 4), Pose(0, 1, 4)};//, Pose(0, -5, 4), Pose(0, 5, 4)};
 	  break;
 	case 5:
-	  acts = {Pose(1, -2, 5), Pose(-1, 2, 5)};
+	  acts = {Pose(1, -2, 5), Pose(-1, 2, 5)};//, Pose(2, -4, 5), Pose(-2, 4, 5)};
 	  break;
 	case 6:
-	  acts = {Pose(1, -1, 6), Pose(-1, 1, 6)};
+	  acts = {Pose(1, -1, 6), Pose(-1, 1, 6)};//, Pose(4, -4, 6), Pose(-4, 4, 6)};
 	  break;
 	case 7:
-	  acts = {Pose(2, -1, 7), Pose(-2, 1, 7)};
+	  acts = {Pose(2, -1, 7), Pose(-2, 1, 7)};//, Pose(4, -2, 7), Pose(-4, 2, 7)};
 	  break;
 	default:
 	  acts = {};
@@ -153,9 +161,11 @@ public:
   Pose pose;
   int config;
   Node* parent;
+  int action;
   float cost;
   vector<int> neighbs;
   vector<float> edgeCosts;
+  vector<int> actions;
   
   Node(Pose pose, int config)
   {
@@ -163,16 +173,19 @@ public:
     this->config = config;
     cost = numeric_limits<float>::infinity();
     parent = NULL;
+    action = 0;
   }
   
-  Node(Pose pose, int config, vector<int> neighbs, vector<float> edgeCosts)
+  Node(Pose pose, int config, vector<int> neighbs, vector<float> edgeCosts, vector<int> actions)
   {
     this->pose = pose;
     this->config = config;
     this->neighbs = neighbs;
     this->edgeCosts = edgeCosts;
+    this->actions = actions;
     cost = numeric_limits<float>::infinity();
     parent = NULL;
+    action = 0;
   }
 };
 
@@ -215,6 +228,28 @@ public:
 typedef vector<vector<int>> gridNodeMap;
 typedef vector<gridNodeMap> thetaNodeMap;
 typedef vector<thetaNodeMap> configNodeMap;
+
+void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
+{
+  cout << "Entered click_cb" << endl;
+  geometry_msgs::Pose pose = msg->pose.pose;
+  
+  cout << "Height at (" << pose.position.x << ", " << pose.position.y << "): " << endl;
+  Position pos(pose.position.x, pose.position.y);
+  if (gridPtr->isInside(pos))
+  {
+    cout << "Wellllllllllllp" << endl;
+    cout << gridPtr->atPosition("elevation", pos) << endl;
+  
+    gridPtr->atPosition("elevation", pos) = -0.1;
+    cout << gridPtr->atPosition("elevation", pos) << endl;
+    GridMapRosConverter::toMessage(*gridPtr, grid_msg);
+  }
+  else
+  {
+    cout << "isn't valid" << endl;
+  }
+}
 
 void map_cb(const octomap_msgs::OctomapConstPtr& map)
 {
@@ -375,7 +410,7 @@ void bloatFoot(gridSubMap &grid, int cogY, int cogX, int w, int h, float theta, 
   }
 }
 
-configMap bloatMap(const vector<int> &data, int height, int width, const vector<Config> &configs, vector<float> angles, int nFeats, int reconRad)
+configMap bloatMap(const vector<env_characterization::Feature> &data, int height, int width, const vector<Config> &configs, vector<float> angles, int nFeats, int reconRad)
 {
   //Init config-space map
   configMap planGraph;
@@ -394,7 +429,8 @@ configMap bloatMap(const vector<int> &data, int height, int width, const vector<
   {
     for (int j = 0; j < width; j++)
     {
-      int feature = data[i * width + j];
+      int feature = data[i * width + j].feature;
+      vector<double> params = data[i * width + j].param;
       
       //if (feature == 0) continue;
       
@@ -436,8 +472,8 @@ configMap bloatMap(const vector<int> &data, int height, int width, const vector<
   return planGraph;
 }
 
-void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap &bloatedMap, int height, int width,
-		 vector<Config> configs, int nAngles)
+void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap &bloatedMap,
+		 const vector<env_characterization::Feature> &features, int height, int width, vector<Config> configs, int nAngles)
 {
   for (int c = 0; c < configs.size(); c++)
   {
@@ -503,13 +539,19 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 		  {
 		    if (bloatedMap[c][theta][i][j][f] || bloatedMap[c][th][y][x][f])
 		    {
-		      maxCost = max(maxCost, configs[c].costs[f - 1]);
+		      maxCost = max(maxCost, configs[c].costs[a][f - 1]);
 		    }
 		  }
 		  
 		  graph[nodeIdx].edgeCosts.push_back(maxCost * length);
+		  graph[nodeIdx].actions.push_back(a);
 		}
 	      }
+	      /*else
+	      {
+		graph[nodeIdx].neighbs.push_back(-1);
+		graph[nodeIdx].edgeCosts.push_back(numeric_limits<float>::infinity());
+	      }*/
 	    }
 	    
 	    //If reconf, connect config neighbs
@@ -527,11 +569,61 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 		  {
 		    graph[nodeIdx].neighbs.push_back(neighbIdx);
 		    graph[nodeIdx].edgeCosts.push_back(50.0);
+		    graph[nodeIdx].actions.push_back(-1);
 		  }
 		}
 	      }
 	    }
 	  }
+	}
+      }
+    }
+  }
+  
+  //Now add in feature special action neighbs
+  for (int i = 0; i < height; i++)
+  {
+    for (int j = 0; j < width; j++)
+    {
+      int feat = features[i * width + j].feature;
+      vector<double> params = features[i * width + j].param;
+      
+      if (feat == 1)
+      {
+	/*cout << "Params" << int(params[0]) << endl;
+	
+	float theta = featAngles[int(params[0])] * 3.14159 / 180;
+	
+	int offX = 9 * cos(theta);
+	int offY = 9 * sin(theta);
+	
+	int nodeIdx1 = graphGrid[1][6][i + offY][j + offX];
+	int nodeIdx2 = graphGrid[1][6][i - offY][j - offX];
+	
+	if (nodeIdx1 > -1 && nodeIdx2 > -1 && features[(i + offY) * width + (j + offX)].feature == 0 &&
+	  features[(i - offY) * width + (j - offX)].feature == 0)
+	{
+	  graph[nodeIdx1].neighbs.push_back(nodeIdx2);
+	  graph[nodeIdx1].edgeCosts.push_back(sqrt(pow(offX, 2) + pow(offY, 2)));
+	  
+	  graph[nodeIdx1].actions.push_back(3);
+	}*/
+	
+	switch (int(params[0]))
+	{
+	  //Ledge feature at angle 6, corresponding to c = 1 (snake), th = 6, a = 2 (climb reverse on angle of 135 degrees)
+	  case 5:
+	    int nodeIdx1 = graphGrid[1][6][i + 6][j - 6];
+	    int nodeIdx2 = graphGrid[1][6][i - 6][j + 6];
+	    
+	    if (nodeIdx1 > -1 && nodeIdx2 > -1 && features[(i + 6) * width + (j - 6)].feature == 0 &&
+	      features[(i - 6) * width + (j + 6)].feature == 0)
+	    {
+	      graph[nodeIdx1].neighbs.push_back(nodeIdx2);
+	      graph[nodeIdx1].edgeCosts.push_back(sqrt(pow(9.0, 2) * 2));
+	      graph[nodeIdx1].actions.push_back(3);
+	    }
+	    break;
 	}
       }
     }
@@ -560,13 +652,18 @@ void planPath(vector<Node> &nodeGraph, Node* start, Node* goal=NULL)
     
     for (int i = 0; i < minNode->neighbs.size(); i++)
     {
-      Node* neighb = &nodeGraph[minNode->neighbs[i]];
-      if (minNode->cost + minNode->edgeCosts[i] < neighb->cost)
+      int neighbIdx = minNode->neighbs[i];
+      if (neighbIdx > 0)
       {
-	neighb->cost = minNode->cost + minNode->edgeCosts[i];
-	neighb->parent = minNode;
-	
-	pq.push(neighb);
+	Node* neighb = &nodeGraph[minNode->neighbs[i]];
+	if (minNode->cost + minNode->edgeCosts[i] < neighb->cost)
+	{
+	  neighb->cost = minNode->cost + minNode->edgeCosts[i];
+	  neighb->parent = minNode;
+	  neighb->action = minNode->actions[i];
+	  
+	  pq.push(neighb);
+	}
       }
     }
   }
@@ -581,6 +678,8 @@ int main(int argc, char** argv)
   
   ros::Subscriber grid_sub = node.subscribe("/debug_grid", 5, grid_cb);
   ros::Subscriber cloud_sub = node.subscribe("/camera/depth_registered/points", 5, cloud_cb);
+  ros::Subscriber click_sub = node.subscribe("/initialpose", 1, click_cb);
+  
   ros::Publisher grid_pub = node.advertise<grid_map_msgs::GridMap>("/elevation", 1);
   ros::Publisher sub_pub = node.advertise<grid_map_msgs::GridMap>("/elevation_sub", 1);
   ros::Publisher occ_pub = node.advertise<nav_msgs::OccupancyGrid>("/input_occ_map", 5);
@@ -602,7 +701,7 @@ int main(int argc, char** argv)
   ros::Publisher edge13_pub = node.advertise<visualization_msgs::Marker>("/edges1_3", 5);
   ros::Publisher edgeC_pub = node.advertise<visualization_msgs::Marker>("/edgesC", 5);
   ros::Publisher path_viz_pub = node.advertise<visualization_msgs::Marker>("/path_viz", 5);
-  ros::Publisher path_pub = node.advertise<nav_msgs::Path>("/path", 5);
+  ros::Publisher path_pub = node.advertise<env_characterization::PathNodeArray>("/path", 5);
   
   ros::ServiceClient client = node.serviceClient<env_characterization::classify_map>("/classify_map");
   
@@ -611,7 +710,7 @@ int main(int argc, char** argv)
   GridMap grid({"elevation"});
   grid.setFrameId("map");
   
-  if (debug)
+  /*if (debug)
   {
     cout << "Debug Mode" << endl;
     
@@ -632,22 +731,60 @@ int main(int argc, char** argv)
     }
     
     cout << "Got cloud" << endl;
+  }*/
+  
+  //octomap::OcTree tree(0.01);  
+  //octomap::pose6d sensorPose = octomap::poseTfToOctomap(sensorToWorldTF);
+  //tree.insertPointCloud(octomap_cloud, octomap::point3d(0, 0, 0), sensorPose, -1, false, true);
+  
+  octomap::OcTree tree("/home/jonathan/catkin_ws/smore_map3.bt");
+  
+  //tree.setResolution(0.005);
+  
+  octomap::OcTree tree2(0.02);
+  
+  for (octomap::OcTree::leaf_iterator iter = tree.begin_leafs(15); iter != tree.end_leafs(); iter++)
+  {
+    //octomap::OcTreeNode node = *iter;
+    if (tree.isNodeOccupied(*iter))
+    {
+      tree2.setNodeValue(iter.getCoordinate(), iter->getLogOdds());
+    }
   }
   
-  octomap::OcTree tree(0.01);
+  GridMapOctomapConverter::fromOctomap(tree2, "elevation", grid);
+  gridPtr = &grid;
   
-  octomap::pose6d sensorPose = octomap::poseTfToOctomap(sensorToWorldTF);
-  tree.insertPointCloud(octomap_cloud, octomap::point3d(0, 0, 0), sensorPose, -1, false, true);
+  cout << "Map Position: " << grid.getPosition()[0] << ", " << grid.getPosition()[1] << endl;
   
-  GridMapOctomapConverter::fromOctomap(tree, "elevation", grid);
+  //Save Depth Image
+  float maxVal = 0;
+  for (GridMapIterator iter(grid); !iter.isPastEnd(); ++iter)
+  {
+    maxVal = max(maxVal, grid.at("elevation", iter.getUnwrappedIndex()));
+  }
+  cout << "Maximum Height: " << maxVal << endl;
+  
+  cv::Mat originalImage;
+  GridMapCvConverter::toImage<uint8_t, 1>(grid, "elevation", CV_8UC1, 0.0, 0.5, originalImage);
+  string img_file = "/home/jonathan/catkin_ws/elevation_map.png";
+  cv::imwrite(img_file, originalImage);
   
   nav_msgs::OccupancyGrid occ_grid;
   GridMapRosConverter::toOccupancyGrid(grid, "elevation", -0.5, 0.5, occ_grid);
   
   chrono::steady_clock::time_point totStart = chrono::steady_clock::now();
   
+  for (int i = 0; i < occ_grid.data.size(); i++)
+  {
+    if (occ_grid.data[i] == -1)
+    {
+      occ_grid.data[i] = 50;
+    }
+  }
+  
   //Find flat regions in map
-  vector<int> flatMap = ClassifyFlat(occ_grid, 0, 3, 0.001);
+  vector<int> flatMap = ClassifyFlat(occ_grid, 0, 2, 0.0002);
   
   cout << "flatMap Size: " << flatMap.size() << endl;
   
@@ -703,10 +840,11 @@ int main(int argc, char** argv)
   //int selection = 0;
   //cin >> selection;
   
-  vector<int> featureMap;
+  //vector<int> featureMap;
+  vector<env_characterization::Feature> featureMap;
   
   chrono::steady_clock::time_point start = chrono::steady_clock::now();
-  for (int i = 0; i < 1; i++)
+  for (int n = 0; n < 1; n++)
   {
     if (client.call(srv))
     {
@@ -719,21 +857,51 @@ int main(int argc, char** argv)
       {
 	if (flatMap[i] == 2)
 	{
-	  int feat = int(srv.response.characters.data[featCt]);
+	  //int feat = int(srv.response.characters.data[featCt]);
 	  
-	  featureMap.push_back(feat - (feat == 0));
-	  classes.data.push_back((srv.response.characters.data[featCt]) * 10);
+	  env_characterization::Feature feat = srv.response.characters[featCt];
+	  featureMap.push_back(feat);
+	  
+	  if (feat.param.size() > 0 && int(feat.param[0]) >= 0)
+	  {
+	    classes.data.push_back((feat.param[0] + 1) * 10);
+	  }
+	  else
+	  {
+	    classes.data.push_back(0);
+	  }
+	  
+	  /*if (feat.feature == 6)
+	  {
+	    feat.feature -= (feat.feature == 0);
+	    featureMap.push_back(feat);
+	    
+	    //featureMap.push_back(feat - (feat == 0));
+	    //classes.data.push_back((srv.response.characters.data[featCt] == 6) * 10);
+	  }
+	  else
+	  {
+	    feat.feature = -1;
+	    featureMap.push_back(-1);
+	    classes.data.push_back(0);
+	  }*/
 	  
 	  featCt++;
 	}
 	else if (flatMap[i] == 1)
 	{
-	  featureMap.push_back(0);
+	  env_characterization::Feature feat;
+	  feat.feature = 0;
+	  featureMap.push_back(feat);
 	  classes.data.push_back(100);
 	}
 	else
 	{
-	  featureMap.push_back(-1);
+	  env_characterization::Feature feat;
+	  feat.feature = -1;
+	  featureMap.push_back(feat);
+	  //featureMap.push_back(-1);
+	  
 	  classes.data.push_back(0);
 	}
       }
@@ -754,8 +922,9 @@ int main(int argc, char** argv)
   
   //Planning Graph Construction
   //Obstacle candidate list: [flat, ledge]
-  Config carCon(true, {0, 1}, {1.0, numeric_limits<float>::infinity()}, 11, 5, 5);
-  Config snakeCon(false, {0, 0}, {1.0, 2.0}, 11, 5, 7);
+  vector<float> flatCosts = {1.0, numeric_limits<float>::infinity()};
+  Config carCon(true, {0, 1}, vector<vector<float>>(8, flatCosts), 11, 5, 5);
+  Config snakeCon(false, {0, 1}, {flatCosts, flatCosts, {3.0, 3.0}, {3.0, 3.0}}, 11, 5, 7);
   vector<Config> configList = {carCon, snakeCon};
   
   vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
@@ -779,7 +948,7 @@ int main(int argc, char** argv)
   vector<Node> nodeGraph;
   configNodeMap nodeGrid;
   
-  CreateGraph(nodeGrid, nodeGraph, planGraph, occ_grid.info.height, occ_grid.info.width, configList, angles.size());
+  CreateGraph(nodeGrid, nodeGraph, planGraph, featureMap, occ_grid.info.height, occ_grid.info.width, configList, angles.size());
   
   cout << "Finished Node Graph Creation" << endl;
   cout << "Graph Size: " << nodeGraph.size() << endl;
@@ -797,19 +966,30 @@ int main(int argc, char** argv)
   
   float res = occ_grid.info.resolution;
   
-  //Publish path msg
-  nav_msgs::Path path;
-  path.header.frame_id = "map";
+  cout << "Resolution: " << res << endl;
+  
+  //Publish path msg  
+  env_characterization::PathNodeArray path;
+  
+  vector<env_characterization::PathNode> rev_path;
   
   cout << occ_grid.info.origin.position.y << endl;
-  Node* goalNode = &nodeGraph[nodeGrid[1][6][49][62]];
+  Node* goalNode = &nodeGraph[nodeGrid[1][6][17 + 28][63]];
+  //Node* goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
   Node* curParent = goalNode->parent;
   
-  geometry_msgs::PoseStamped waypt;
-  waypt.pose.position.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-  waypt.pose.position.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
-  waypt.pose.position.z = (goalNode->config) * 0.02 + goalNode->pose.theta * 0.01;
-  path.poses.push_back(waypt);
+  env_characterization::PathNode pathNode;
+  pathNode.config = goalNode->config;
+  pathNode.theta = angles[goalNode->pose.theta] * 3.141592 / 180;
+  pathNode.action = goalNode->action;
+  
+  geometry_msgs::Pose waypt;
+  waypt.position.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+  waypt.position.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+  waypt.position.z = 0;
+  pathNode.pose = waypt;
+  
+  path.path.push_back(pathNode);
   
   cout << goalNode->pose.x << ", " << goalNode->pose.y << " : " << goalNode->config << endl;
   cout << "Cost: " << goalNode->cost << endl;
@@ -817,13 +997,31 @@ int main(int argc, char** argv)
   {
     //cout << curParent->pose.x << ", " << curParent->pose.y << " : " << curParent->config << endl;
     
-    waypt.pose.position.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-    waypt.pose.position.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
-    waypt.pose.position.z = (curParent->config) * 0.02 + curParent->pose.theta * 0.01;
-    path.poses.push_back(waypt);
+    pathNode.config = curParent->config;
+    pathNode.theta = angles[curParent->pose.theta] * 3.141592 / 180;
+    pathNode.action = curParent->action;
+    
+    waypt.position.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
+    waypt.position.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+    waypt.position.z = 0;
+    pathNode.pose = waypt;
+    
+    path.path.push_back(pathNode);
     
     curParent = curParent->parent;
   }
+  
+  reverse(path.path.begin(), path.path.end());
+  
+  /*for (int i = 0; i < path.path.size(); i++)
+  {
+    if (path.path[i].config == 1)
+    {
+      path.path[i + 10].action = 3;
+      path.path.erase(path.path.begin() + i + 11, path.path.end());
+      break;
+    }
+  }*/
   
   //Visualization Stuff
   
@@ -917,7 +1115,7 @@ int main(int argc, char** argv)
   
   for (int c = 0; c < configList.size(); c++)
   {
-    for (int theta = 2 * !configList[c].omni; theta < min(6, int(nodeGrid[c].size())); theta++)
+    for (int theta = 3 * !configList[c].omni; theta < min(7, int(nodeGrid[c].size())); theta++)
     {
       vizMaps.push_back(vizTemplate);
       vizMaps.back().info.origin.position.z = (c + 1) * 0.2 + theta * 0.05;
@@ -1003,7 +1201,7 @@ int main(int argc, char** argv)
     curParent = curParent->parent;
   }
   
-  goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
+  /*goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
   curParent = goalNode->parent;
   
   p.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
@@ -1023,7 +1221,7 @@ int main(int argc, char** argv)
     pathLine.points.push_back(p);
     
     curParent = curParent->parent;
-  }
+  }*/
   
   gridSubMap vizGraph = planGraph[0][0];
   vector<int> vizBloatData;
@@ -1044,7 +1242,6 @@ int main(int argc, char** argv)
     bloat_msg.data.push_back(vizBloatData[i] * 10);
   }
   
-  grid_map_msgs::GridMap grid_msg;
   GridMapRosConverter::toMessage(grid, grid_msg);
   
   while (ros::ok())

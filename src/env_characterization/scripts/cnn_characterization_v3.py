@@ -18,6 +18,7 @@ import time
 import rospy
 from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Int32MultiArray
+from env_characterization.msg import Feature
 
 from env_characterization.srv import *
 
@@ -228,13 +229,16 @@ def handle_classify_map(req):
     feature_snips = []
     for idx, p in enumerate(results):
         #print max(p["probabilities"]), p["classes"], idx
-        if max(p["probabilities"]) >= 0.9 and p["classes"] > 0:
-            data.append(p["classes"])
+        feat = Feature()
+        if max(p["probabilities"]) >= 0.95 and p["classes"] > 0:
+            feat.feature = p["classes"]
             features.append(p["classes"])
             feature_snips.append(characters[idx])
         else:
-            data.append(0)
-            
+            feat.feature = -1
+        data.append(feat)
+
+    print ("Found features")            
     print np.size(feature_snips, 0), np.size(feature_snips, 1)
 
     feature_snips = np.array(feature_snips)    
@@ -249,20 +253,29 @@ def handle_classify_map(req):
     
     orients = []
     for jdx, q in enumerate(orient_results):
-        orients.append(q["classes"] + 1)
+        orients.append(q["classes"])
+        
+    print("Found params")
 
     feature_count = 0
     for i in range(np.size(data, 0)):
-        if data[i] > 0 and feature_count < np.size(orients, 0):
-            data[i] = orients[feature_count]
+        if data[i].feature > 0:
+            data[i].param.append(orients[feature_count])
             feature_count += 1
     print orients
     
+#    feature_count = 0
+#    for i in range(np.size(data, 0)):
+#        if data[i] > 0 and feature_count < np.size(orients, 0):
+#            data[i] = orients[feature_count]
+#            feature_count += 1
+#    print orients
+    
     #data = [p["classes"] for idx, p in enumerate(results)]
     
-    classes.data = data
+    #classes.characters = data
     
-    return classify_mapResponse(classes)
+    return classify_mapResponse(data)
 
 def main(unused_argv):
 #    train()

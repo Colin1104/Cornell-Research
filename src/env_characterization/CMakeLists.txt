@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(env_characterization)
 
+find_package(gazebo REQUIRED)
+include_directories(${GAZEBO_INCLUDE_DIRS})
+link_directories(${GAZEBO_LIBRARY_DIRS})
+list(APPEND CMAKE_CXX_FLAGS "${GAZEBO_CXX_FLAGS}")
+
 set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 
 ## Find catkin macros and libraries
@@ -37,6 +42,15 @@ find_package(octomap REQUIRED)
  add_service_files(
    FILES
    classify_map.srv
+   action_srv.srv
+ )
+ 
+ add_message_files(
+   FILES
+   PathNode.msg
+   PathNodeArray.msg
+   Action.msg
+   Feature.msg
  )
 
 # Generate added messages and services with any dependencies listed here
@@ -46,6 +60,7 @@ find_package(octomap REQUIRED)
    geometry_msgs
    nav_msgs
    grid_map_msgs
+   env_characterization
  )
 
 ###################################
@@ -101,6 +116,12 @@ add_executable(
   navigation
   src/navigation.cpp
 )
+
+add_library(snake_control SHARED src/snake_control.cc)
+target_link_libraries(snake_control ${GAZEBO_LIBRARIES})
+
+add_library(car_control SHARED src/car_control.cc)
+target_link_libraries(car_control ${GAZEBO_LIBRARIES})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(
