@@ -34,6 +34,9 @@
 #include <env_characterization/PathNodeArray.h>
 #include <env_characterization/Feature.h>
 
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+
 #include <cmath>
 #include <ctime>
 #include <chrono>
@@ -46,7 +49,9 @@ typedef vector<gridSubMap> thetaSubMap;
 typedef vector<thetaSubMap> configMap;
 
 grid_map_msgs::GridMap grid_msg;
+grid_map_msgs::GridMap snip_msg;
 GridMap* gridPtr;
+ros::ServiceClient* clientPtr;
 
 octomap::Pointcloud octomap_cloud;
 sensor_msgs::PointCloud2 cloud;
@@ -233,6 +238,7 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 {
   cout << "Entered click_cb" << endl;
   geometry_msgs::Pose pose = msg->pose.pose;
+  double yaw = tf::getYaw(pose.orientation);
   
   cout << "Height at (" << pose.position.x << ", " << pose.position.y << "): " << endl;
   Position pos(pose.position.x, pose.position.y);
@@ -240,10 +246,61 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
   {
     cout << "Wellllllllllllp" << endl;
     cout << gridPtr->atPosition("elevation", pos) << endl;
-  
-    gridPtr->atPosition("elevation", pos) = -0.1;
-    cout << gridPtr->atPosition("elevation", pos) << endl;
-    GridMapRosConverter::toMessage(*gridPtr, grid_msg);
+    
+    bool success;
+    GridMap snip = gridPtr->getSubmap(pos, Length(11 * gridPtr->getResolution(), 11 * gridPtr->getResolution()), success);
+    
+    GridMap snip_rot = snip;
+    
+    Eigen::Rotation2Dd t(90 * M_PI / 180 + yaw);
+    for (GridMapIterator it(snip_rot); !it.isPastEnd(); ++it)
+    {
+      Position position;
+      snip_rot.getPosition(*it, position);
+      
+      Eigen::Vector2d vec = position - snip_rot.getPosition();
+      Eigen::Vector2d pos_rot = t * vec;
+      
+      position = snip_rot.getPosition() + pos_rot;
+      
+      if (gridPtr->isInside(position))
+      {
+	snip_rot.at("elevation", *it) = gridPtr->atPosition("elevation", position);
+      }
+    }
+    
+    cv::Mat originalImage;
+    GridMapCvConverter::toImage<uint8_t, 1>(snip_rot, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
+    string layer = "image";
+    GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, layer, snip_rot);
+    
+    GridMapRosConverter::toMessage(snip_rot, snip_msg);
+    
+    nav_msgs::OccupancyGrid occ_snip;
+    GridMapRosConverter::toOccupancyGrid(snip_rot, "elevation", -0.5, 0.5, occ_snip);
+    
+    for (int i = 0; i < occ_snip.data.size(); i++)
+    {
+      if (occ_snip.data[i] == -1)
+      {
+	occ_snip.data[i] = 50;
+      }
+    }
+    
+    vector<nav_msgs::OccupancyGrid> parts = {occ_snip};
+    
+    env_characterization::classify_map srv;
+    srv.request.partitions = parts;
+    
+    if (clientPtr->call(srv))
+    {
+      env_characterization::Feature feat = srv.response.characters[0];
+      cout << "Feature: " << feat.feature << endl;
+    }
+    else
+    {
+      cout << "Service failed" << endl;
+    }
   }
   else
   {
@@ -687,6 +744,7 @@ int main(int argc, char** argv)
   ros::Publisher bloat_pub = node.advertise<nav_msgs::OccupancyGrid>("/bloated_map", 5);
   ros::Publisher flat_pub = node.advertise<nav_msgs::OccupancyGrid>("/flat_map", 5);
   ros::Publisher cost_pub = node.advertise<nav_msgs::OccupancyGrid>("/cost_map", 5);
+  ros::Publisher snip_pub = node.advertise<grid_map_msgs::GridMap>("/snip", 1);
   
   ros::Publisher config0_pub = node.advertise<nav_msgs::OccupancyGrid>("/config0", 5);
   ros::Publisher config10_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_0", 5);
@@ -704,10 +762,11 @@ int main(int argc, char** argv)
   ros::Publisher path_pub = node.advertise<env_characterization::PathNodeArray>("/path", 5);
   
   ros::ServiceClient client = node.serviceClient<env_characterization::classify_map>("/classify_map");
+  clientPtr = &client;
   
   listener = new tf::TransformListener;
   
-  GridMap grid({"elevation"});
+  GridMap grid({"elevation_0"});
   grid.setFrameId("map");
   
   /*if (debug)
@@ -731,15 +790,13 @@ int main(int argc, char** argv)
     }
     
     cout << "Got cloud" << endl;
-  }*/
+  }
   
-  //octomap::OcTree tree(0.01);  
-  //octomap::pose6d sensorPose = octomap::poseTfToOctomap(sensorToWorldTF);
-  //tree.insertPointCloud(octomap_cloud, octomap::point3d(0, 0, 0), sensorPose, -1, false, true);
+  octomap::OcTree tree(0.01);  
+  octomap::pose6d sensorPose = octomap::poseTfToOctomap(sensorToWorldTF);
+  tree.insertPointCloud(octomap_cloud, octomap::point3d(0, 0, 0), sensorPose, -1, false, true);*/
   
   octomap::OcTree tree("/home/jonathan/catkin_ws/smore_map3.bt");
-  
-  //tree.setResolution(0.005);
   
   octomap::OcTree tree2(0.02);
   
@@ -752,7 +809,7 @@ int main(int argc, char** argv)
     }
   }
   
-  GridMapOctomapConverter::fromOctomap(tree2, "elevation", grid);
+  GridMapOctomapConverter::fromOctomap(tree, "elevation", grid);
   gridPtr = &grid;
   
   cout << "Map Position: " << grid.getPosition()[0] << ", " << grid.getPosition()[1] << endl;
@@ -766,9 +823,11 @@ int main(int argc, char** argv)
   cout << "Maximum Height: " << maxVal << endl;
   
   cv::Mat originalImage;
-  GridMapCvConverter::toImage<uint8_t, 1>(grid, "elevation", CV_8UC1, 0.0, 0.5, originalImage);
+  GridMapCvConverter::toImage<uint8_t, 1>(grid, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
   string img_file = "/home/jonathan/catkin_ws/elevation_map.png";
   cv::imwrite(img_file, originalImage);
+  
+  //GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, "elevation", grid);
   
   nav_msgs::OccupancyGrid occ_grid;
   GridMapRosConverter::toOccupancyGrid(grid, "elevation", -0.5, 0.5, occ_grid);
@@ -855,7 +914,7 @@ int main(int argc, char** argv)
       classes.data = {};
       for (int i = 0; i < flatMap.size(); i++)
       {
-	if (flatMap[i] == 2)
+	if (flatMap[i] == 2)// && featCt < srv.response.characters.size())
 	{
 	  //int feat = int(srv.response.characters.data[featCt]);
 	  
@@ -956,7 +1015,9 @@ int main(int argc, char** argv)
   cout << "Begin Dijkstra Path Planning" << endl;
   
   //Dijkstra Path Planning
-  Node* startNode = &nodeGraph[nodeGrid[0][0][30][10]];
+  //Node* startNode = &nodeGraph[nodeGrid[0][0][30][10]];
+  cout << "Start Node: " << nodeGrid[0][0][55][65] << endl;
+  Node* startNode = &nodeGraph[nodeGrid[0][0][55][65]];
   planPath(nodeGraph, startNode);
   
   cout << "Finished Path Planning" << endl;
@@ -1252,6 +1313,7 @@ int main(int argc, char** argv)
     bloat_pub.publish(bloat_msg);
     flat_pub.publish(flat_msg);
     cost_pub.publish(costMap);
+    snip_pub.publish(snip_msg);
     
     config0_pub.publish(vizMaps[0]);
     config10_pub.publish(vizMaps[1]);

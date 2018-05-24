@@ -117,6 +117,11 @@ add_executable(
   src/navigation.cpp
 )
 
+add_executable(
+  hand_labelling
+  src/hand_labelling.cpp
+)
+
 add_library(snake_control SHARED src/snake_control.cc)
 target_link_libraries(snake_control ${GAZEBO_LIBRARIES})
 
@@ -146,6 +151,11 @@ target_link_libraries(
 
 target_link_libraries(
   navigation
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(
+  hand_labelling
   ${catkin_LIBRARIES}
 )
 

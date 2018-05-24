@@ -27,7 +27,7 @@ import cnn_orientation
 occ_map = OccupancyGrid()
 
 NUM_CLASSES = 2
-NUM_EXAMPLES = 360
+NUM_ANGLES = 16
 
 IMAGE_SIZE = 12
 IMAGE_PIXELS = IMAGE_SIZE**2
@@ -62,7 +62,7 @@ def cnn_model_fn(features, labels, mode):
     #pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
     
     #Dense Layer
-    pool2_flat = tf.reshape(conv2, [-1, 12 * 12 * 64])
+    pool2_flat = tf.reshape(conv2, [-1, IMAGE_SIZE * IMAGE_SIZE * 64])
     dense = tf.layers.dense(inputs=pool2_flat, units=1024, activation=tf.nn.relu)
     dropout = tf.layers.dropout(
             inputs=dense, rate=0.2, training=mode == tf.estimator.ModeKeys.TRAIN)
@@ -104,29 +104,29 @@ def train():
     classed_data = []
     classed_labels = []
     
-    complete_data = []
-    complete_labels = []
-    
     for i in range(NUM_CLASSES):
         sample_data = []
         sample_labels = []
-        while True:
-            filename = "/home/jonathan/env_characterization_db/" + str(i) + "_" + str(np.size(sample_data, 0)) + ".png"
-            try:
-                raw_image = mpimg.imread(filename)
-                sample_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
-                sample_labels.append(i)
-                if i > 0:
-                    complete_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
-                    complete_labels.append(i)
-            except:
-                break
+        for j in range(NUM_ANGLES if i > 0 else 1):
+            sample_ct = 0
+            while True:
+                if i == 0:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(sample_ct) + ".png"
+                else:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(j) + "_" + str(sample_ct) + ".png"
+                try:
+                    raw_image = mpimg.imread(filename)
+                    sample_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
+                    sample_labels.append(i)
+                    sample_ct += 1
+                except:
+                    break
         classed_data.append(np.array(sample_data))
         classed_labels.append(np.array(sample_labels))
     
     #Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
-            model_fn=cnn_model_fn, model_dir="/home/jonathan/env_characterization_db/env_classifier_model")
+            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/env_classifier_model")
     
     # Set up logging for predictions
     # Log the values in the "Softmax" tensor with label "probabilities"
@@ -137,61 +137,80 @@ def train():
     #Train the model
     sample_counts = [np.size(classed_data[i], 0) for i in range(NUM_CLASSES)]
     class_batch = min(sample_counts)
+    max_sample = max(sample_counts)
+
+#    for i in range(NUM_CLASSES):
+#        np.random.shuffle(classed_data[i])
+#        
+#        class_size = np.size(classed_data[i], 0)
+#        resized_class = classed_data[i][:]
+#        for j in range(max_sample / class_size - 1):
+#            resized_class = np.append(resized_class, classed_data[i], 0)
+#        
+#        resized_class = np.append(resized_class, classed_data[i][0:(max_sample % class_size)], 0)
+#        classed_data[i] = resized_class[:]
+#        classed_labels[i] = np.ones(max_sample, dtype="int32") * i
+    
+    #Extend each class set to be even multiple of class_batch,
+    #using repeated data from beginning of set
+#    for i in range(NUM_CLASSES):
+#        classed_data[i] = np.append(classed_data[i], classed_data[i][0:(class_batch - np.size(classed_data[i], 0) % class_batch)], 0)
+        
     N = max(sample_counts) / class_batch
     
     print sample_counts, N
     
-    TOTAL_STEPS = 10000
-    negative_class = classed_data[0][:]
-#    rand.shuffle(negative_class)
+#    train_data = np.reshape(classed_data, (sum(sample_counts), IMAGE_PIXELS))
+#    train_labels = np.reshape(classed_labels, (sum(sample_counts)))
+    train_data = np.concatenate([classed_data[i] for i in range(np.size(classed_data, 0))])
+    train_labels = np.concatenate([classed_labels[i] for i in range(np.size(classed_labels, 0))])
     
-    for i in range (1):
-        train_data = complete_data[:]
-        train_labels = complete_labels[:]
-#        train_data.extend(negative_class[i * class_batch:(i + 1) * class_batch])
-#        train_labels.extend(np.zeros(class_batch, dtype=int))
-        train_data.extend(negative_class[0:360])
-        train_labels.extend(np.zeros(360, dtype=int))
-        
-        train_data = np.array(train_data)
-        train_labels = np.array(train_labels)
-        
-        train_input_fn = tf.estimator.inputs.numpy_input_fn(
-                x={"x": train_data},
-                y=train_labels,
-                batch_size=100,
-                num_epochs=1000,
-                shuffle=True)
-        mnist_classifier.train(
-                input_fn=train_input_fn,
-                steps=None,
-                hooks=[logging_hook])
+    
+    train_input_fn = tf.estimator.inputs.numpy_input_fn(
+            x={"x": train_data},
+            y=train_labels,
+            batch_size=100,
+            num_epochs=10000,
+            shuffle=True)
+    mnist_classifier.train(
+            input_fn=train_input_fn,
+            steps=None,
+            hooks=[logging_hook])
                 
 def evaluate():
-    eval_data = []
-    eval_labels = []
-
-#    for i in range(65 * 45):
-#        filename_test = "/home/jonathan/env_characterization_db/0_" + str(i) + ".png"
-#    
-#        raw_image = mpimg.imread(filename_test)
-#        eval_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
-#        eval_labels.append(0)
-
-    for i in range(360):
-        filename_test = "/home/jonathan/env_characterization_db/1_" + str(i) + ".png"
+    classed_data = []
+    classed_labels = []
     
-        raw_image = mpimg.imread(filename_test)
-        eval_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
-        eval_labels.append(1)
-        
+    for i in range(NUM_CLASSES):
+        sample_data = []
+        sample_labels = []
+        for j in range(NUM_ANGLES if i > 0 else 1):
+            sample_ct = 0
+            while True:
+                if i == 0:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(sample_ct) + ".png"
+                else:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(j) + "_" + str(sample_ct) + ".png"
+                try:
+                    raw_image = mpimg.imread(filename)
+                    sample_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
+                    sample_labels.append(i)
+                    sample_ct += 1
+                    if i > 0:
+                        complete_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
+                        complete_labels.append(i)
+                except:
+                    break
+        classed_data.append(np.array(sample_data))
+        classed_labels.append(np.array(sample_labels))
+
     #Convert lists to arrays for numpy input fn
-    eval_data = np.array(eval_data)
-    eval_labels = np.array(eval_labels)
+    eval_data = np.array(classed_data[0])
+    eval_labels = np.array(classed_labels[0])
     
     #Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
-            model_fn=cnn_model_fn, model_dir="/home/jonathan/env_characterization_db/env_classifier_model")
+            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/env_classifier_model")
     
     #Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -206,7 +225,7 @@ def handle_classify_map(req):
     snippets = req.partitions
     
     mnist_classifier = tf.estimator.Estimator(
-            model_fn=cnn_model_fn, model_dir="/home/jonathan/env_characterization_db/env_classifier_model")
+            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/env_classifier_model")
             
     orient_classifier = tf.estimator.Estimator(
             model_fn=cnn_orientation.cnn_orientation_model_fn, model_dir="/home/jonathan/env_characterization_db/8_orientation_model")
@@ -216,6 +235,8 @@ def handle_classify_map(req):
     print ("Got Here")
     
     characters = np.array([np.float32(np.array(snippets[i].data) / 100.0 - 0.5) for i in range(0, np.size(snippets, 0))])
+    
+    print characters[0]
     
     pred_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": characters},
@@ -227,42 +248,44 @@ def handle_classify_map(req):
     data = []
     features = []
     feature_snips = []
+    feature_ct = 0
     for idx, p in enumerate(results):
         #print max(p["probabilities"]), p["classes"], idx
         feat = Feature()
-        if max(p["probabilities"]) >= 0.95 and p["classes"] > 0:
+        if max(p["probabilities"]) > 0.99 and p["classes"] > 0:
             feat.feature = p["classes"]
             features.append(p["classes"])
             feature_snips.append(characters[idx])
+            feature_ct += 1
         else:
             feat.feature = -1
         data.append(feat)
 
-    print ("Found features")            
-    print np.size(feature_snips, 0), np.size(feature_snips, 1)
-
-    feature_snips = np.array(feature_snips)    
-    
-    #Classify orientation of feature
-    orient_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={"x": feature_snips},
-        num_epochs=1,
-        shuffle=False)
-        
-    orient_results = orient_classifier.predict(orient_input_fn)
-    
-    orients = []
-    for jdx, q in enumerate(orient_results):
-        orients.append(q["classes"])
-        
-    print("Found params")
+    print ("Found %s features" % feature_ct)
+#    print np.size(feature_snips, 0), np.size(feature_snips, 1)
+#
+#    feature_snips = np.array(feature_snips)    
+#    
+#    #Classify orientation of feature
+#    orient_input_fn = tf.estimator.inputs.numpy_input_fn(
+#        x={"x": feature_snips},
+#        num_epochs=1,
+#        shuffle=False)
+#        
+#    orient_results = orient_classifier.predict(orient_input_fn)
+#    
+#    orients = []
+#    for jdx, q in enumerate(orient_results):
+#        orients.append(q["classes"])
+#        
+#    print("Found params")
 
     feature_count = 0
     for i in range(np.size(data, 0)):
         if data[i].feature > 0:
-            data[i].param.append(orients[feature_count])
+            data[i].param.append(0)#orients[feature_count])
             feature_count += 1
-    print orients
+    #print orients
     
 #    feature_count = 0
 #    for i in range(np.size(data, 0)):
