@@ -29,7 +29,7 @@ occ_map = OccupancyGrid()
 NUM_CLASSES = 2
 NUM_ANGLES = 16
 
-IMAGE_SIZE = 12
+IMAGE_SIZE = 18
 IMAGE_PIXELS = IMAGE_SIZE**2
 
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -160,21 +160,29 @@ def train():
     
     print sample_counts, N
     
-#    train_data = np.reshape(classed_data, (sum(sample_counts), IMAGE_PIXELS))
-#    train_labels = np.reshape(classed_labels, (sum(sample_counts)))
     train_data = np.concatenate([classed_data[i] for i in range(np.size(classed_data, 0))])
     train_labels = np.concatenate([classed_labels[i] for i in range(np.size(classed_labels, 0))])
+    
+    train_batch = [np.array([train_data[i], train_labels[i]]) for i in range(np.size(train_data, 0))]
+    
+    np.random.shuffle(train_batch)
+    
+    train_data = np.array([train_batch[i][0] for i in range(np.size(train_batch, 0))])
+    train_labels = np.array([train_batch[i][1] for i in range(np.size(train_batch, 0))])
+    
+#    train_data = np.array(classed_data[1])
+#    train_labels = np.array(classed_labels[1])
     
     
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": train_data},
             y=train_labels,
             batch_size=100,
-            num_epochs=10000,
+            num_epochs=None,
             shuffle=True)
     mnist_classifier.train(
             input_fn=train_input_fn,
-            steps=None,
+            steps=30000,
             hooks=[logging_hook])
                 
 def evaluate():
@@ -236,7 +244,7 @@ def handle_classify_map(req):
     
     characters = np.array([np.float32(np.array(snippets[i].data) / 100.0 - 0.5) for i in range(0, np.size(snippets, 0))])
     
-    print characters[0]
+#    print characters[0]
     
     pred_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": characters},
@@ -252,7 +260,7 @@ def handle_classify_map(req):
     for idx, p in enumerate(results):
         #print max(p["probabilities"]), p["classes"], idx
         feat = Feature()
-        if max(p["probabilities"]) > 0.9 and p["classes"] > 0:
+        if max(p["probabilities"]) > 0.5 and p["classes"] > 0:
             feat.feature = p["classes"]
             features.append(p["classes"])
             feature_snips.append(characters[idx])
@@ -301,8 +309,8 @@ def handle_classify_map(req):
     return classify_mapResponse(data)
 
 def main(unused_argv):
-#    train()
-#    evaluate()
+    train()
+    evaluate()
     
     rospy.init_node('classifier', anonymous=True)
     rospy.Subscriber("occ_map", OccupancyGrid, callback)

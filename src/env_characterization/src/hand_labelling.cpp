@@ -45,8 +45,8 @@ vector<vector<int>> sample_counts(2, vector<int>(angles.size(), 0));
 
 ros::Publisher snip_pub;
 
-float map_size = 0.12;
-int snip_size = 12;
+float map_size = 0.18;
+int snip_size = 18;
 
 vector<int> sampleCount(nLabels, 0);
 
@@ -233,9 +233,9 @@ int main(int argc, char** argv)
   string path = "/home/jonathan/catkin_ws/" + filename;
   octomap::OcTree tree(filename);//"/home/jonathan/catkin_ws/env_2_2.bt");
   
-  octomap::OcTree tree2(0.02);
+  octomap::OcTree tree2(0.01);
   
-  for (octomap::OcTree::leaf_iterator iter = tree.begin_leafs(14); iter != tree.end_leafs(); iter++)
+  for (octomap::OcTree::leaf_iterator iter = tree.begin_leafs(15); iter != tree.end_leafs(); iter++)
   {
     //octomap::OcTreeNode node = *iter;
     if (tree.isNodeOccupied(*iter))
@@ -269,8 +269,8 @@ int main(int argc, char** argv)
   cout << "Maximum Height: " << maxVal << endl;  
   
   cv::Mat originalImage;
-  //path.replace(path.end()-3, path.end(), ".png");
-  path = "/home/jonathan/catkin_ws/env_map.png";
+  path.replace(path.end()-3, path.end(), ".png");
+  //path = "/home/jonathan/catkin_ws/env_map.png";
   GridMapCvConverter::toImage<uint8_t, 1>(grid, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
   cv::imwrite(path, originalImage);
   

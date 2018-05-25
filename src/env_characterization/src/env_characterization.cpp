@@ -65,6 +65,41 @@ bool debug = false;
 
 tf::TransformListener *listener;
 
+struct NodeSpec
+{
+  int c;
+  int th;
+  int i;
+  int j;
+  
+  NodeSpec()
+  {
+    
+  }
+  
+  NodeSpec(int c_, int th_, int i_, int j_)
+  {
+    c = c_;
+    th = th_;
+    i = i_;
+    j = j_;
+  }
+};
+
+struct Link
+{
+  pair<NodeSpec, NodeSpec> vertices;
+  int action;
+  float cost;
+  
+  Link(pair<NodeSpec, NodeSpec> v, int a, float c)
+  {
+    vertices = v;
+    action = a;
+    cost = c;
+  }
+};
+
 class Pose
 {
 public:
@@ -248,7 +283,7 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
     cout << gridPtr->atPosition("elevation", pos) << endl;
     
     bool success;
-    GridMap snip = gridPtr->getSubmap(pos, Length(11 * gridPtr->getResolution(), 11 * gridPtr->getResolution()), success);
+    GridMap snip = gridPtr->getSubmap(pos, Length(17 * gridPtr->getResolution(), 17 * gridPtr->getResolution()), success);
     
     GridMap snip_rot = snip;
     
@@ -530,7 +565,8 @@ configMap bloatMap(const vector<env_characterization::Feature> &data, int height
 }
 
 void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap &bloatedMap,
-		 const vector<env_characterization::Feature> &features, int height, int width, vector<Config> configs, int nAngles)
+		 const vector<env_characterization::Feature> &features, int height, int width,
+		 vector<Config> configs, int nAngles, vector<vector<vector<Link>>> featLinks)
 {
   for (int c = 0; c < configs.size(); c++)
   {
@@ -645,27 +681,27 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
       int feat = features[i * width + j].feature;
       vector<double> params = features[i * width + j].param;
       
-      if (feat == 1)
+      /*if (feat > 0)
       {
-	/*cout << "Params" << int(params[0]) << endl;
+	vector<Link> links = featLinks[feat][params[0]];
 	
-	float theta = featAngles[int(params[0])] * 3.14159 / 180;
-	
-	int offX = 9 * cos(theta);
-	int offY = 9 * sin(theta);
-	
-	int nodeIdx1 = graphGrid[1][6][i + offY][j + offX];
-	int nodeIdx2 = graphGrid[1][6][i - offY][j - offX];
-	
-	if (nodeIdx1 > -1 && nodeIdx2 > -1 && features[(i + offY) * width + (j + offX)].feature == 0 &&
-	  features[(i - offY) * width + (j - offX)].feature == 0)
+	for (int l = 0; l < links.size(); l++)
 	{
-	  graph[nodeIdx1].neighbs.push_back(nodeIdx2);
-	  graph[nodeIdx1].edgeCosts.push_back(sqrt(pow(offX, 2) + pow(offY, 2)));
+	  Link link = links[l];
+	  int nodeIdx1 = graphGrid[link.vertices.first.c][link.vertices.first.th][i + link.vertices.first.i][j + link.vertices.first.j];
+	  int nodeIdx2 = graphGrid[link.vertices.second.c][link.vertices.second.th][i + link.vertices.second.i][j + link.vertices.second.j];
 	  
-	  graph[nodeIdx1].actions.push_back(3);
-	}*/
-	
+	  if (nodeIdx1 > -1 && nodeIdx2 > -1)
+	  {
+	    graph[nodeIdx1].neighbs.push_back(nodeIdx2);
+	    graph[nodeIdx1].edgeCosts.push_back(link.cost);
+	    graph[nodeIdx1].actions.push_back(link.action);
+	  }
+	}
+      }*/
+      
+      /*if (feat == 1)
+      {
 	switch (int(params[0]))
 	{
 	  //Ledge feature at angle 6, corresponding to c = 1 (snake), th = 6, a = 2 (climb reverse on angle of 135 degrees)
@@ -682,7 +718,7 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 	    }
 	    break;
 	}
-      }
+      }*/
     }
   }
 }
@@ -811,7 +847,7 @@ int main(int argc, char** argv)
   
   GridMapOctomapConverter::fromOctomap(tree, "elevation", grid);*/
   
-  string img_path = "/home/jonathan/catkin_ws/env_2_2.png";
+  string img_path = "/home/jonathan/catkin_ws/cardboard_box0.png";
   cv::Mat originalImage = cv::imread(img_path);  
   //GridMapCvConverter::initializeFromImage(originalImage, 0.01, grid, Position(0.0, 0.0));
   
@@ -853,7 +889,7 @@ int main(int argc, char** argv)
   cout << "flatMap Size: " << flatMap.size() << endl;
   
   //Create selection map for classification
-  int size = 12;
+  int size = 18;
   
   vector<bool> selection;
   
@@ -1011,6 +1047,17 @@ int main(int argc, char** argv)
   
   vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
   
+  //Feature Actions
+  
+  //Vectors below represent:
+  //feat->param->link
+  vector<vector<vector<Link>>> featLinks;
+  vector<vector<Link>> ledgeLinks;
+  
+  ledgeLinks.push_back({Link(make_pair(NodeSpec(1, 0, 0, 12), NodeSpec(1, 0, 0, -12)), 4, 24 * 3)});
+  featLinks.push_back(ledgeLinks);
+  
+  
   //Translate featureMap to bloatFeats
   vector<int> bloatFeats;
   
@@ -1024,7 +1071,7 @@ int main(int argc, char** argv)
   vector<Node> nodeGraph;
   configNodeMap nodeGrid;
   
-  CreateGraph(nodeGrid, nodeGraph, planGraph, featureMap, occ_grid.info.height, occ_grid.info.width, configList, angles.size());
+  CreateGraph(nodeGrid, nodeGraph, planGraph, featureMap, occ_grid.info.height, occ_grid.info.width, configList, angles.size(), featLinks);
   
   cout << "Finished Node Graph Creation" << endl;
   cout << "Graph Size: " << nodeGraph.size() << endl;
