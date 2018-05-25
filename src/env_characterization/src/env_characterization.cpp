@@ -731,7 +731,7 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "env_characterization");
   ros::NodeHandle node;
   
-  ros::Rate rate(20.0);
+  ros::Rate rate(2.0);
   
   ros::Subscriber grid_sub = node.subscribe("/debug_grid", 5, grid_cb);
   ros::Subscriber cloud_sub = node.subscribe("/camera/depth_registered/points", 5, cloud_cb);
@@ -766,7 +766,7 @@ int main(int argc, char** argv)
   
   listener = new tf::TransformListener;
   
-  GridMap grid({"elevation_0"});
+  GridMap grid({"elevation"});
   grid.setFrameId("map");
   
   /*if (debug)
@@ -796,7 +796,7 @@ int main(int argc, char** argv)
   octomap::pose6d sensorPose = octomap::poseTfToOctomap(sensorToWorldTF);
   tree.insertPointCloud(octomap_cloud, octomap::point3d(0, 0, 0), sensorPose, -1, false, true);*/
   
-  octomap::OcTree tree("/home/jonathan/catkin_ws/smore_map3.bt");
+  /*octomap::OcTree tree("/home/jonathan/catkin_ws/smore_map3.bt");
   
   octomap::OcTree tree2(0.02);
   
@@ -809,13 +809,24 @@ int main(int argc, char** argv)
     }
   }
   
-  GridMapOctomapConverter::fromOctomap(tree, "elevation", grid);
+  GridMapOctomapConverter::fromOctomap(tree, "elevation", grid);*/
+  
+  string img_path = "/home/jonathan/catkin_ws/env_2_2.png";
+  cv::Mat originalImage = cv::imread(img_path);  
+  //GridMapCvConverter::initializeFromImage(originalImage, 0.01, grid, Position(0.0, 0.0));
+  
+  grid.setGeometry(Length(2.57, 2.57), 0.01, Position(0.0, 0.0));
+  GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, "elevation", grid);
+  //grid.setPosition(Position(0.0, 0.0));
   gridPtr = &grid;
+  
+  GridMapRosConverter::toMessage(grid, grid_msg);
+  grid_pub.publish(grid_msg);
   
   cout << "Map Position: " << grid.getPosition()[0] << ", " << grid.getPosition()[1] << endl;
   
   //Save Depth Image
-  float maxVal = 0;
+  /*float maxVal = 0;
   for (GridMapIterator iter(grid); !iter.isPastEnd(); ++iter)
   {
     maxVal = max(maxVal, grid.at("elevation", iter.getUnwrappedIndex()));
@@ -825,25 +836,19 @@ int main(int argc, char** argv)
   cv::Mat originalImage;
   GridMapCvConverter::toImage<uint8_t, 1>(grid, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
   string img_file = "/home/jonathan/catkin_ws/elevation_map.png";
-  cv::imwrite(img_file, originalImage);
+  cv::imwrite(img_file, originalImage);*/
   
   //GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, "elevation", grid);
   
   nav_msgs::OccupancyGrid occ_grid;
   GridMapRosConverter::toOccupancyGrid(grid, "elevation", -0.5, 0.5, occ_grid);
   
+  occ_pub.publish(occ_grid);
+  
   chrono::steady_clock::time_point totStart = chrono::steady_clock::now();
   
-  for (int i = 0; i < occ_grid.data.size(); i++)
-  {
-    if (occ_grid.data[i] == -1)
-    {
-      occ_grid.data[i] = 50;
-    }
-  }
-  
   //Find flat regions in map
-  vector<int> flatMap = ClassifyFlat(occ_grid, 0, 2, 0.0002);
+  vector<int> flatMap = ClassifyFlat(occ_grid, 0, 3, 0.0001);
   
   cout << "flatMap Size: " << flatMap.size() << endl;
   
@@ -903,81 +908,99 @@ int main(int argc, char** argv)
   vector<env_characterization::Feature> featureMap;
   
   chrono::steady_clock::time_point start = chrono::steady_clock::now();
-  for (int n = 0; n < 1; n++)
+  
+  chrono::steady_clock::time_point t1;
+  
+  if (client.call(srv))
   {
-    if (client.call(srv))
+    cout << "Service Responded" << endl;
+    
+    t1 = chrono::steady_clock::now();
+
+    cout << "Classification Time: " << chrono::duration_cast<chrono::microseconds>(t1 - start).count() / 1000000.0 << endl;
+    
+    //classes.data = srv.response.characters.data;
+    
+    int featCt = 0;
+    classes.data = {};
+    for (int i = 0; i < flatMap.size(); i++)
     {
-      cout << "Service Responded" << endl;
-      //classes.data = srv.response.characters.data;
-      
-      int featCt = 0;
-      classes.data = {};
-      for (int i = 0; i < flatMap.size(); i++)
+      if (flatMap[i] == 2)// && featCt < srv.response.characters.size())
       {
-	if (flatMap[i] == 2)// && featCt < srv.response.characters.size())
+	//int feat = int(srv.response.characters.data[featCt]);
+	
+	env_characterization::Feature feat = srv.response.characters[featCt];
+	featureMap.push_back(feat);
+	
+	if (feat.param.size() > 0 && int(feat.param[0]) >= 0)
 	{
-	  //int feat = int(srv.response.characters.data[featCt]);
-	  
-	  env_characterization::Feature feat = srv.response.characters[featCt];
-	  featureMap.push_back(feat);
-	  
-	  if (feat.param.size() > 0 && int(feat.param[0]) >= 0)
-	  {
-	    classes.data.push_back((feat.param[0] + 1) * 10);
-	  }
-	  else
-	  {
-	    classes.data.push_back(0);
-	  }
-	  
-	  /*if (feat.feature == 6)
-	  {
-	    feat.feature -= (feat.feature == 0);
-	    featureMap.push_back(feat);
-	    
-	    //featureMap.push_back(feat - (feat == 0));
-	    //classes.data.push_back((srv.response.characters.data[featCt] == 6) * 10);
-	  }
-	  else
-	  {
-	    feat.feature = -1;
-	    featureMap.push_back(-1);
-	    classes.data.push_back(0);
-	  }*/
-	  
-	  featCt++;
-	}
-	else if (flatMap[i] == 1)
-	{
-	  env_characterization::Feature feat;
-	  feat.feature = 0;
-	  featureMap.push_back(feat);
-	  classes.data.push_back(100);
+	  classes.data.push_back((feat.param[0] + 1) * 10);
 	}
 	else
 	{
-	  env_characterization::Feature feat;
-	  feat.feature = -1;
-	  featureMap.push_back(feat);
-	  //featureMap.push_back(-1);
-	  
 	  classes.data.push_back(0);
 	}
+	
+	/*if (feat.feature == 6)
+	{
+	  feat.feature -= (feat.feature == 0);
+	  featureMap.push_back(feat);
+	  
+	  //featureMap.push_back(feat - (feat == 0));
+	  //classes.data.push_back((srv.response.characters.data[featCt] == 6) * 10);
+	}
+	else
+	{
+	  feat.feature = -1;
+	  featureMap.push_back(-1);
+	  classes.data.push_back(0);
+	}*/
+	
+	featCt++;
       }
-      
-      /*classes.info.height -= size;
-      classes.info.width -= size;
-      classes.info.origin.position.x += size / 2 * classes.info.resolution;
-      classes.info.origin.position.y += size / 2 * classes.info.resolution;*/
+      else if (flatMap[i] == 1)
+      {
+	env_characterization::Feature feat;
+	feat.feature = 0;
+	featureMap.push_back(feat);
+	classes.data.push_back(100);
+      }
+      else
+      {
+	env_characterization::Feature feat;
+	feat.feature = -1;
+	featureMap.push_back(feat);
+	//featureMap.push_back(-1);
+	
+	classes.data.push_back(0);
+      }
     }
-    else
+    
+    /*classes.info.height -= size;
+    classes.info.width -= size;
+    classes.info.origin.position.x += size / 2 * classes.info.resolution;
+    classes.info.origin.position.y += size / 2 * classes.info.resolution;*/
+  }
+  else
+  {
+    cout << "Service Failed" << endl;
+    
+    while (ros::ok())
     {
-      cout << "Service Failed" << endl;
+      occ_pub.publish(occ_grid);
+      class_pub.publish(classes);
+      grid_pub.publish(grid_msg);
+      flat_pub.publish(flat_msg);
+      snip_pub.publish(snip_msg);
+      
+      ros::spinOnce();
+      rate.sleep();
     }
   }
-  chrono::steady_clock::time_point stop = chrono::steady_clock::now();
   
-  cout << chrono::duration_cast<chrono::microseconds>(stop - start).count() / 1000000.0 << endl;
+  chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+  
+  cout << "Flattenize Time: " << chrono::duration_cast<chrono::microseconds>(t2 - t1).count() / 1000000.0 << endl;
   
   //Planning Graph Construction
   //Obstacle candidate list: [flat, ledge]
@@ -990,12 +1013,6 @@ int main(int argc, char** argv)
   
   //Translate featureMap to bloatFeats
   vector<int> bloatFeats;
-  for (int i = 0; i < featureMap.size(); i++)
-  {
-    //cout << featureMap[i] << ", ";
-    //if (featureMap[i] == 0) bloatFeats.push_back(0);
-    //else if (featureMap[i] < 0) bloatFeats.push_back(
-  }
   
   int reconRad = 12;
   configMap planGraph = bloatMap(featureMap, classes.info.height, classes.info.width, configList, angles, 2, reconRad);
@@ -1012,17 +1029,22 @@ int main(int argc, char** argv)
   cout << "Finished Node Graph Creation" << endl;
   cout << "Graph Size: " << nodeGraph.size() << endl;
   
+  chrono::steady_clock::time_point t3 = chrono::steady_clock::now();
+  
+  cout << "Graph Creation Time: " << chrono::duration_cast<chrono::microseconds>(t3 - t2).count() / 1000000.0 << endl;
+  
   cout << "Begin Dijkstra Path Planning" << endl;
   
   //Dijkstra Path Planning
   //Node* startNode = &nodeGraph[nodeGrid[0][0][30][10]];
-  cout << "Start Node: " << nodeGrid[0][0][55][65] << endl;
-  Node* startNode = &nodeGraph[nodeGrid[0][0][55][65]];
+  cout << "Start Node: " << nodeGrid[0][0][100][200] << endl;
+  Node* startNode = &nodeGraph[nodeGrid[0][0][100][200]];
   planPath(nodeGraph, startNode);
   
   cout << "Finished Path Planning" << endl;
   
   chrono::steady_clock::time_point totStop = chrono::steady_clock::now();
+  cout << "Path Planning Time: " << chrono::duration_cast<chrono::microseconds>(totStop - t3).count() / 1000000.0 << endl;
   cout << "Total Processing Time: " << chrono::duration_cast<chrono::microseconds>(totStop - totStart).count() / 1000000.0 << endl;
   
   float res = occ_grid.info.resolution;
@@ -1035,7 +1057,7 @@ int main(int argc, char** argv)
   vector<env_characterization::PathNode> rev_path;
   
   cout << occ_grid.info.origin.position.y << endl;
-  Node* goalNode = &nodeGraph[nodeGrid[1][6][17 + 28][63]];
+  Node* goalNode = &nodeGraph[nodeGrid[1][6][100][200]];
   //Node* goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
   Node* curParent = goalNode->parent;
   

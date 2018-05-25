@@ -5,6 +5,7 @@
 #include <grid_map_msgs/GridMap.h>
 #include <grid_map_cv/grid_map_cv.hpp>
 #include <grid_map_octomap/GridMapOctomapConverter.hpp>
+#include <grid_map_core/SubmapGeometry.hpp>
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Pose.h>
@@ -108,7 +109,7 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
       
       r.sleep();
     }
-    
+      
     int feat;
     cout << "Enter Feature # (-1 to discard): ";
     cin >> feat;
@@ -116,47 +117,50 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
     //Now go through again to write images
     if (feat > -1)
     {
-      for (float th = 0; th < 359.9; th+= 5)
+      for (float heightOff = 0.0; heightOff <= 0.1; heightOff += 0.02)
       {
-	GridMap snip_rot = snip;
-	double angle = (360 - th) * M_PI / 180 + yaw;
-	
-	vector<double> errors;
-	for (int i = 0; i < angles.size(); i++)
+	for (float th = 0; th < 359.9; th+= 5)
 	{
-	  errors.push_back(min(abs(th - angles[i]), 360 - abs(th - angles[i])));
-	}
-	int thID = distance(errors.begin(), min_element(errors.begin(), errors.end()));
-	
-	Eigen::Rotation2Dd t(angle);
-	for (GridMapIterator it(snip_rot); !it.isPastEnd(); ++it)
-	{
-	  Position position;
-	  snip_rot.getPosition(*it, position);
+	  GridMap snip_rot = snip;
+	  double angle = (360 - th) * M_PI / 180 + yaw;
 	  
-	  Eigen::Vector2d vec = position - snip_rot.getPosition();
-	  Eigen::Vector2d pos_rot = t * vec;
-	  
-	  position = snip_rot.getPosition() + pos_rot;
-	  
-	  if (gridPtr->isInside(position))
+	  vector<double> errors;
+	  for (int i = 0; i < angles.size(); i++)
 	  {
-	    snip_rot.at("elevation", *it) = gridPtr->atPosition("elevation", position);
+	    errors.push_back(min(abs(th - angles[i]), 360 - abs(th - angles[i])));
 	  }
+	  int thID = distance(errors.begin(), min_element(errors.begin(), errors.end()));
+	  
+	  Eigen::Rotation2Dd t(angle);
+	  for (GridMapIterator it(snip_rot); !it.isPastEnd(); ++it)
+	  {
+	    Position position;
+	    snip_rot.getPosition(*it, position);
+	    
+	    Eigen::Vector2d vec = position - snip_rot.getPosition();
+	    Eigen::Vector2d pos_rot = t * vec;
+	    
+	    position = snip_rot.getPosition() + pos_rot;
+	    
+	    if (gridPtr->isInside(position))
+	    {
+	      snip_rot.at("elevation", *it) = gridPtr->atPosition("elevation", position) + heightOff;
+	    }
+	  }
+	  
+	  cv::Mat originalImage;
+	  GridMapCvConverter::toImage<uint8_t, 1>(snip_rot, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
+	  string img_file;
+	  if (feat == 0)
+	  {
+	    img_file = data_dir + to_string(feat) + "_" + to_string(sample_counts[feat][0]++) + ".png";
+	  }
+	  else
+	  {
+	    img_file = data_dir + to_string(feat) + "_" + to_string(thID) + "_" + to_string(sample_counts[feat][thID]++) + ".png";
+	  }
+	  cv::imwrite(img_file, originalImage);
 	}
-	
-	cv::Mat originalImage;
-	GridMapCvConverter::toImage<uint8_t, 1>(snip_rot, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
-	string img_file;
-	if (feat == 0)
-	{
-	  img_file = data_dir + to_string(feat) + "_" + to_string(sample_counts[feat][0]++) + ".png";
-	}
-	else
-	{
-	  img_file = data_dir + to_string(feat) + "_" + to_string(thID) + "_" + to_string(sample_counts[feat][thID]++) + ".png";
-	}
-	cv::imwrite(img_file, originalImage);
       }
       
       cout << "Samples written to db" << endl;
@@ -229,14 +233,14 @@ int main(int argc, char** argv)
   string path = "/home/jonathan/catkin_ws/" + filename;
   octomap::OcTree tree(filename);//"/home/jonathan/catkin_ws/env_2_2.bt");
   
-  octomap::OcTree tree2(0.01);
+  octomap::OcTree tree2(0.02);
   
-  for (octomap::OcTree::leaf_iterator iter = tree.begin_leafs(15); iter != tree.end_leafs(); iter++)
+  for (octomap::OcTree::leaf_iterator iter = tree.begin_leafs(14); iter != tree.end_leafs(); iter++)
   {
     //octomap::OcTreeNode node = *iter;
     if (tree.isNodeOccupied(*iter))
     {
-      octomap::point3d point = iter.getCoordinate() - octomap::point3d(0.0, 0.0, 0.05);
+      octomap::point3d point = iter.getCoordinate() - octomap::point3d(0.0, 0.0, 0.06);
       point.z() = max(point.z(), 0.0f);
       tree2.setNodeValue(point, iter->getLogOdds());
     }
@@ -246,12 +250,33 @@ int main(int argc, char** argv)
   grid.setFrameId("map");
   GridMapOctomapConverter::fromOctomap(tree2, "elevation", grid);
   
+  GridMap grid_square = grid;
+  grid_square.setGeometry(Length(2.57, 2.57), grid.getResolution(), grid.getPosition());
+  
+  for (GridMapIterator it(grid_square); !it.isPastEnd(); ++it)
+  {
+    grid_square.at("elevation", *it) = 0.005;
+  }
+  
+  grid_square.addDataFrom(grid, false, true, true);
+  grid = grid_square;
+  
+  float maxVal = 0;
+  for (GridMapIterator iter(grid); !iter.isPastEnd(); ++iter)
+  {
+    maxVal = max(maxVal, grid.at("elevation", *iter));
+  }
+  cout << "Maximum Height: " << maxVal << endl;  
+  
   cv::Mat originalImage;
-  path.replace(path.end()-3, path.end(), ".png");
+  //path.replace(path.end()-3, path.end(), ".png");
+  path = "/home/jonathan/catkin_ws/env_map.png";
   GridMapCvConverter::toImage<uint8_t, 1>(grid, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
   cv::imwrite(path, originalImage);
-  //originalImage = cv::imread(path);
-  //GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, "image", grid);
+  
+  originalImage = cv::imread(path);
+  GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, "elevation", grid);
+  grid.setPosition(Position(0.0, 0.0));
   
   gridPtr = &grid;
   

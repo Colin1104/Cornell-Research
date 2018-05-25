@@ -195,6 +195,7 @@ namespace gazebo
 	targetVals[i + 1][3] = 1.5;
 	targetVals[i][3] = 0;
 	if (i > 0) targetVals[i - 1][3] = -1.5;
+	else targetVals[5][3] = -1.5;
 	
 	SetVelocity(1);
 	
@@ -242,12 +243,13 @@ namespace gazebo
 	targetVals[i - 1][3] = 1.5;
 	targetVals[i][3] = 0;
 	if (c > 0) targetVals[i + 1][3] = -1.5;
+	else targetVals[1][3] = -1.5;
 	
 	SetVelocity(-1);
 	
 	ROS_ERROR("Climb");
 	
-	sim_sleep(3.0);
+	sim_sleep(4.0);
       }
       
       InitializeRev();

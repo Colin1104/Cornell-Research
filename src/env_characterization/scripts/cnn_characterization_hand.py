@@ -252,7 +252,7 @@ def handle_classify_map(req):
     for idx, p in enumerate(results):
         #print max(p["probabilities"]), p["classes"], idx
         feat = Feature()
-        if max(p["probabilities"]) > 0.99 and p["classes"] > 0:
+        if max(p["probabilities"]) > 0.9 and p["classes"] > 0:
             feat.feature = p["classes"]
             features.append(p["classes"])
             feature_snips.append(characters[idx])
