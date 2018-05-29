@@ -6,6 +6,7 @@
 #include <grid_map_msgs/GridMap.h>
 #include <grid_map_cv/grid_map_cv.hpp>
 #include <grid_map_octomap/GridMapOctomapConverter.hpp>
+#include <grid_map_core/SubmapGeometry.hpp>
 
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/highgui/highgui.hpp>
@@ -19,6 +20,7 @@
 #include <std_msgs/Int32.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Pose.h>
+#include <std_msgs/Float32MultiArray.h>
 
 #include <octomap/octomap.h>
 #include <octomap_msgs/Octomap.h>
@@ -41,6 +43,8 @@
 #include <ctime>
 #include <chrono>
 
+#include <iomanip>
+
 using namespace grid_map;
 using namespace std;
 
@@ -62,6 +66,8 @@ bool map_received = false;
 bool cloud_received = false;
 bool grid_received = false;
 bool debug = false;
+
+ros::Publisher snip_pub;
 
 tf::TransformListener *listener;
 
@@ -282,18 +288,26 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
     cout << "Wellllllllllllp" << endl;
     cout << gridPtr->atPosition("elevation", pos) << endl;
     
+    std::cout << std::setprecision(2) << std::fixed;
+    
     bool success;
     GridMap snip = gridPtr->getSubmap(pos, Length(17 * gridPtr->getResolution(), 17 * gridPtr->getResolution()), success);
     
     GridMap snip_rot = snip;
     
-    Eigen::Rotation2Dd t(90 * M_PI / 180 + yaw);
+    Eigen::Rotation2Dd t(0); //90 * M_PI / 180 + yaw);
+    int rowCt = 0;
+    grid_map::Matrix& data = snip_rot["elevation"];
     for (GridMapIterator it(snip_rot); !it.isPastEnd(); ++it)
     {
+      int i = it.getLinearIndex();
+      
       Position position;
       snip_rot.getPosition(*it, position);
       
-      Eigen::Vector2d vec = position - snip_rot.getPosition();
+      position -= snip_rot.getPosition();
+      
+      /*Eigen::Vector2d vec = position - snip_rot.getPosition();
       Eigen::Vector2d pos_rot = t * vec;
       
       position = snip_rot.getPosition() + pos_rot;
@@ -301,18 +315,49 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
       if (gridPtr->isInside(position))
       {
 	snip_rot.at("elevation", *it) = gridPtr->atPosition("elevation", position);
-      }
+      }*/
+      
+      cout << data(i) << ", ";
+      //cout << "(" << position[0] << ", " << position[1] << "), ";
+      if (++rowCt % 18 == 0) cout << endl;
     }
     
     cv::Mat originalImage;
     GridMapCvConverter::toImage<uint8_t, 1>(snip_rot, "elevation", CV_8UC1, 0.0, 1.0, originalImage);
     string layer = "image";
     GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, layer, snip_rot);
+    cv::imwrite("/home/jonathan/catkin_ws/snippet_img.png", originalImage);
     
     GridMapRosConverter::toMessage(snip_rot, snip_msg);
     
     nav_msgs::OccupancyGrid occ_snip;
     GridMapRosConverter::toOccupancyGrid(snip_rot, "elevation", -0.5, 0.5, occ_snip);
+    
+    bool isSuccess;
+    SubmapGeometry geom(*gridPtr, pos, Length(17 * gridPtr->getResolution(), 17 * gridPtr->getResolution()), isSuccess);
+    
+    if (isSuccess)
+    {
+      int rowCt = 0;
+      for (SubmapIterator iter(geom); !iter.isPastEnd(); ++iter)
+      {
+	occ_snip.data[rowCt] = (gridPtr->at("elevation", *iter) + 0.5) * 100;
+	
+	cout << gridPtr->at("elevation", *iter) << ", ";
+	if (++rowCt % 18 == 0) cout << endl;
+	
+	/*gridPtr->at("elevation", *iter) = 0.0;
+	GridMapRosConverter::toMessage(*gridPtr, snip_msg);
+	ros::Rate(10).sleep();
+	snip_pub.publish(snip_msg);*/
+      }
+    }
+    else
+    {
+      cout << "Invalid submap" << endl;
+    }
+    
+    cout << endl << endl;
     
     for (int i = 0; i < occ_snip.data.size(); i++)
     {
@@ -331,6 +376,7 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
     {
       env_characterization::Feature feat = srv.response.characters[0];
       cout << "Feature: " << feat.feature << endl;
+      cout << "Param: " << feat.param << endl;
     }
     else
     {
@@ -433,9 +479,9 @@ vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_
   
   cout << "Input Map Dimensions: " << occ_grid.info.height << " x " << occ_grid.info.width << " : " << occ_grid.data.size() << endl;
   
-  for (int i = 0; i < occ_grid.info.height - size; i++)
+  for (int i = size / 2; i < occ_grid.info.height - size / 2; i++)
   {
-    for (int j = 0; j < occ_grid.info.width - size; j++)
+    for (int j = size / 2; j < occ_grid.info.width - size / 2; j++)
     {
       int idx = i * occ_grid.info.width + j;
       
@@ -451,7 +497,30 @@ vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_
       pos.position.x = occ_grid.info.origin.position.x + j * occ_grid.info.resolution;
       pos.position.y = occ_grid.info.origin.position.y + i * occ_grid.info.resolution;
       snippet.info.origin.position = pos.position;
-      vector<int8_t> vec;
+      
+      Position gridPos(pos.position.x, pos.position.y);
+      
+      bool isSuccess;
+      SubmapGeometry geom(*gridPtr, gridPos, Length(17 * gridPtr->getResolution(), 17 * gridPtr->getResolution()), isSuccess);
+      
+      if (isSuccess)
+      {
+	vector<int8_t> vec;
+	for (SubmapIterator iter(geom); !iter.isPastEnd(); ++iter)
+	{
+	  vec.push_back((gridPtr->at("elevation", *iter) + 0.5) * 100);
+	}
+	
+	snippet.data = vec;
+      
+	snippets.push_back(snippet);
+      }
+      else
+      {
+	cout << "Invalid submap" << endl;
+      }
+	
+      /*vector<int8_t> vec;
       for (int k = 0; k < size; k++)
       {
 	int basedx = idx + k * occ_grid.info.width;
@@ -459,7 +528,7 @@ vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_
       }
       snippet.data = vec;
       
-      snippets.push_back(snippet);
+      snippets.push_back(snippet);*/
     }
   }
   
@@ -522,7 +591,7 @@ configMap bloatMap(const vector<env_characterization::Feature> &data, int height
     for (int j = 0; j < width; j++)
     {
       int feature = data[i * width + j].feature;
-      vector<double> params = data[i * width + j].param;
+      int param = data[i * width + j].param;
       
       //if (feature == 0) continue;
       
@@ -679,11 +748,11 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
     for (int j = 0; j < width; j++)
     {
       int feat = features[i * width + j].feature;
-      vector<double> params = features[i * width + j].param;
+      int param = features[i * width + j].param;
       
       /*if (feat > 0)
       {
-	vector<Link> links = featLinks[feat][params[0]];
+	vector<Link> links = featLinks[feat][param];
 	
 	for (int l = 0; l < links.size(); l++)
 	{
@@ -780,7 +849,7 @@ int main(int argc, char** argv)
   ros::Publisher bloat_pub = node.advertise<nav_msgs::OccupancyGrid>("/bloated_map", 5);
   ros::Publisher flat_pub = node.advertise<nav_msgs::OccupancyGrid>("/flat_map", 5);
   ros::Publisher cost_pub = node.advertise<nav_msgs::OccupancyGrid>("/cost_map", 5);
-  ros::Publisher snip_pub = node.advertise<grid_map_msgs::GridMap>("/snip", 1);
+  snip_pub = node.advertise<grid_map_msgs::GridMap>("/snip", 1);
   
   ros::Publisher config0_pub = node.advertise<nav_msgs::OccupancyGrid>("/config0", 5);
   ros::Publisher config10_pub = node.advertise<nav_msgs::OccupancyGrid>("/config1_0", 5);
@@ -847,7 +916,7 @@ int main(int argc, char** argv)
   
   GridMapOctomapConverter::fromOctomap(tree, "elevation", grid);*/
   
-  string img_path = "/home/jonathan/catkin_ws/cardboard_box0.png";
+  string img_path = "/home/jonathan/catkin_ws/env_2_2.png";
   cv::Mat originalImage = cv::imread(img_path);  
   //GridMapCvConverter::initializeFromImage(originalImage, 0.01, grid, Position(0.0, 0.0));
   
@@ -884,6 +953,7 @@ int main(int argc, char** argv)
   chrono::steady_clock::time_point totStart = chrono::steady_clock::now();
   
   //Find flat regions in map
+  int mapCush = 10;
   vector<int> flatMap = ClassifyFlat(occ_grid, 0, 3, 0.0001);
   
   cout << "flatMap Size: " << flatMap.size() << endl;
@@ -968,9 +1038,9 @@ int main(int argc, char** argv)
 	env_characterization::Feature feat = srv.response.characters[featCt];
 	featureMap.push_back(feat);
 	
-	if (feat.param.size() > 0 && int(feat.param[0]) >= 0)
+	if (feat.feature > 0)
 	{
-	  classes.data.push_back((feat.param[0] + 1) * 10);
+	  classes.data.push_back(((feat.param == 6) * 2 + 1) * 10);
 	}
 	else
 	{
@@ -1098,7 +1168,7 @@ int main(int argc, char** argv)
   
   cout << "Resolution: " << res << endl;
   
-  //Publish path msg  
+  //Publish path msg
   env_characterization::PathNodeArray path;
   
   vector<env_characterization::PathNode> rev_path;

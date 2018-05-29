@@ -23,10 +23,9 @@ from env_characterization.srv import *
 
 occ_map = OccupancyGrid()
 
-NUM_CLASSES = 8
-NUM_EXAMPLES = 360
+NUM_CLASSES = 16
 
-IMAGE_SIZE = 12
+IMAGE_SIZE = 18
 IMAGE_PIXELS = IMAGE_SIZE**2
 
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -59,7 +58,7 @@ def cnn_orientation_model_fn(features, labels, mode):
     #pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
     
     #Dense Layer
-    pool2_flat = tf.reshape(conv2, [-1, 12 * 12 * 64])
+    pool2_flat = tf.reshape(conv2, [-1, IMAGE_PIXELS * 64])
     dense = tf.layers.dense(inputs=pool2_flat, units=1024, activation=tf.nn.relu)
     dropout = tf.layers.dropout(
             inputs=dense, rate=0.2, training=mode == tf.estimator.ModeKeys.TRAIN)
@@ -106,20 +105,45 @@ def train():
     complete_labels = []
     
     for i in range(1, 2):
-        train_data = []
-        train_labels = []
-        while True:
-            filename = "/home/jonathan/env_characterization_db/" + str(i) + "_" + str(np.size(train_data, 0)) + ".png"
-            try:
-                raw_image = mpimg.imread(filename)
-                train_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
-                train_labels.append((np.size(train_labels, 0) - 1)/ 45)
-            except:
-                break
+        for j in range(NUM_CLASSES if i > 0 else 1):
+            sample_data = []
+            sample_labels = []
+            
+            sample_ct = 0
+            while True:
+                if i == 0:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(sample_ct) + ".png"
+                else:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(j) + "_" + str(sample_ct) + ".png"
+                try:
+                    raw_image = mpimg.imread(filename)
+                    sample_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
+                    sample_labels.append(j)
+                    sample_ct += 1
+                except:
+                    break
+            classed_data.append(np.array(sample_data))
+            classed_labels.append(np.array(sample_labels))
     
     #Create the Estimator
     orient_classifier = tf.estimator.Estimator(
-            model_fn=cnn_orientation_model_fn, model_dir="/home/jonathan/env_characterization_db/8_orientation_model")
+            model_fn=cnn_orientation_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/16_orientation_model")
+    
+#    for i in range(1, 2):
+#        train_data = []
+#        train_labels = []
+#        while True:
+#            filename = "/home/jonathan/env_characterization_db/" + str(i) + "_" + str(np.size(train_data, 0)) + ".png"
+#            try:
+#                raw_image = mpimg.imread(filename)
+#                train_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
+#                train_labels.append((np.size(train_labels, 0) - 1)/ 45)
+#            except:
+#                break
+#    
+#    #Create the Estimator
+#    orient_classifier = tf.estimator.Estimator(
+#            model_fn=cnn_orientation_model_fn, model_dir="/home/jonathan/env_characterization_db/8_orientation_model")
     
     # Set up logging for predictions
     # Log the values in the "Softmax" tensor with label "probabilities"
@@ -128,8 +152,18 @@ def train():
             tensors=tensors_to_log, every_n_iter=50)
     
     #Train the model
-    train_data = np.array(train_data)
-    train_labels = np.array(train_labels)
+#    train_data = np.array(train_data)
+#    train_labels = np.array(train_labels)
+    
+    train_data = np.concatenate([classed_data[i] for i in range(np.size(classed_data, 0))])
+    train_labels = np.concatenate([classed_labels[i] for i in range(np.size(classed_labels, 0))])
+    
+    train_batch = [np.array([train_data[i], train_labels[i]]) for i in range(np.size(train_data, 0))]
+    
+    np.random.shuffle(train_batch)
+    
+    train_data = np.array([train_batch[i][0] for i in range(np.size(train_batch, 0))])
+    train_labels = np.array([train_batch[i][1] for i in range(np.size(train_batch, 0))])
     
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": train_data},
@@ -143,40 +177,36 @@ def train():
             hooks=[logging_hook])
             
 def evaluate():
-    eval_data = []
-    eval_labels = []
+    classed_data = []
+    classed_labels = []
         
-    for i in range(360):
-        filename_test = "/home/jonathan/env_characterization_db/1_" + str(i) + ".png"
-    
-        raw_image = mpimg.imread(filename_test)
-        eval_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
-        eval_labels.append((np.size(eval_data, 0) - 1) / 45)
-        
-    #Convert lists to arrays for numpy input fn
-    eval_data = np.array(eval_data)
-    eval_labels = np.array(eval_labels)
+    for i in range(1, 2):
+        for j in range(NUM_CLASSES if i > 0 else 1):
+            sample_data = []
+            sample_labels = []
+            
+            sample_ct = 0
+            while True:
+                if i == 0:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(sample_ct) + ".png"
+                else:
+                    filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(j) + "_" + str(sample_ct) + ".png"
+                try:
+                    raw_image = mpimg.imread(filename)
+                    sample_data.append(np.reshape(raw_image, (IMAGE_PIXELS)))
+                    sample_labels.append(j)
+                    sample_ct += 1
+                except:
+                    break
+            classed_data.append(np.array(sample_data))
+            classed_labels.append(np.array(sample_labels))
+            
+    eval_data = np.concatenate([classed_data[i] for i in range(np.size(classed_data, 0))])
+    eval_labels = np.concatenate([classed_labels[i] for i in range(np.size(classed_labels, 0))])
     
     #Create the Estimator
     orient_classifier = tf.estimator.Estimator(
-            model_fn=cnn_orientation_model_fn, model_dir="/home/jonathan/env_characterization_db/8_orientation_model")
-            
-    pred_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={"x": eval_data[:1]},
-        num_epochs=1,
-        shuffle=False)
-    
-    results = orient_classifier.predict(pred_input_fn)
-    classes = OccupancyGrid()
-    data = []
-    features = []
-    
-    print "Got the results"
-    
-    for idx, p in enumerate(results):
-        #print max(p["probabilities"]), p["classes"], idx
-        "In enumeration of results"        
-        print idx, p
+            model_fn=cnn_orientation_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/16_orientation_model")
     
     #Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(

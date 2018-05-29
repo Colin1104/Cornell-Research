@@ -1,2 +1,2 @@
 int32 feature
-float64[] param
+int32 param

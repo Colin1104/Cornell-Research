@@ -213,8 +213,8 @@ def evaluate():
         classed_labels.append(np.array(sample_labels))
 
     #Convert lists to arrays for numpy input fn
-    eval_data = np.array(classed_data[0])
-    eval_labels = np.array(classed_labels[0])
+    eval_data = np.array(classed_data[1])
+    eval_labels = np.array(classed_labels[1])
     
     #Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
@@ -236,7 +236,7 @@ def handle_classify_map(req):
             model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/env_classifier_model")
             
     orient_classifier = tf.estimator.Estimator(
-            model_fn=cnn_orientation.cnn_orientation_model_fn, model_dir="/home/jonathan/env_characterization_db/8_orientation_model")
+            model_fn=cnn_orientation.cnn_orientation_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/16_orientation_model")
     
     print np.size(snippets, 0)
     
@@ -244,7 +244,13 @@ def handle_classify_map(req):
     
     characters = np.array([np.float32(np.array(snippets[i].data) / 100.0 - 0.5) for i in range(0, np.size(snippets, 0))])
     
-#    print characters[0]
+    np.set_printoptions(precision=1)
+    print ("Input Data")
+    print np.reshape(characters[0], (IMAGE_SIZE, IMAGE_SIZE))
+    
+    print ("Reading from Img")
+    img = mpimg.imread("/home/jonathan/catkin_ws/snippet_img.png")    
+    print (img)
     
     pred_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": characters},
@@ -260,7 +266,7 @@ def handle_classify_map(req):
     for idx, p in enumerate(results):
         #print max(p["probabilities"]), p["classes"], idx
         feat = Feature()
-        if max(p["probabilities"]) > 0.5 and p["classes"] > 0:
+        if max(p["probabilities"]) > 0.99 and p["classes"] > 0:
             feat.feature = p["classes"]
             features.append(p["classes"])
             feature_snips.append(characters[idx])
@@ -270,30 +276,30 @@ def handle_classify_map(req):
         data.append(feat)
 
     print ("Found %s features" % feature_ct)
-#    print np.size(feature_snips, 0), np.size(feature_snips, 1)
-#
-#    feature_snips = np.array(feature_snips)    
-#    
-#    #Classify orientation of feature
-#    orient_input_fn = tf.estimator.inputs.numpy_input_fn(
-#        x={"x": feature_snips},
-#        num_epochs=1,
-#        shuffle=False)
-#        
-#    orient_results = orient_classifier.predict(orient_input_fn)
-#    
-#    orients = []
-#    for jdx, q in enumerate(orient_results):
-#        orients.append(q["classes"])
-#        
-#    print("Found params")
+    print np.size(feature_snips, 0), np.size(feature_snips, 1)
+
+    feature_snips = np.array(feature_snips)    
+    
+    #Classify orientation of feature
+    orient_input_fn = tf.estimator.inputs.numpy_input_fn(
+        x={"x": feature_snips},
+        num_epochs=1,
+        shuffle=False)
+        
+    orient_results = orient_classifier.predict(orient_input_fn)
+    
+    orients = []
+    for jdx, q in enumerate(orient_results):
+        orients.append(q["classes"])
+        
+    print("Found params")
 
     feature_count = 0
     for i in range(np.size(data, 0)):
         if data[i].feature > 0:
-            data[i].param.append(0)#orients[feature_count])
+            data[i].param = orients[feature_count]
             feature_count += 1
-    #print orients
+    print orients
     
 #    feature_count = 0
 #    for i in range(np.size(data, 0)):
@@ -309,8 +315,8 @@ def handle_classify_map(req):
     return classify_mapResponse(data)
 
 def main(unused_argv):
-    train()
-    evaluate()
+#    train()
+#    evaluate()
     
     rospy.init_node('classifier', anonymous=True)
     rospy.Subscriber("occ_map", OccupancyGrid, callback)
