@@ -1,3 +1,3 @@
-nav_msgs/OccupancyGrid[] partitions
+std_msgs/Float32MultiArray[] partitions
 ---
 env_characterization/Feature[] characters

@@ -330,18 +330,17 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
     
     GridMapRosConverter::toMessage(snip_rot, snip_msg);
     
-    nav_msgs::OccupancyGrid occ_snip;
-    GridMapRosConverter::toOccupancyGrid(snip_rot, "elevation", -0.5, 0.5, occ_snip);
-    
     bool isSuccess;
     SubmapGeometry geom(*gridPtr, pos, Length(17 * gridPtr->getResolution(), 17 * gridPtr->getResolution()), isSuccess);
     
     if (isSuccess)
     {
+      std_msgs::Float32MultiArray snip;
+      
       int rowCt = 0;
       for (SubmapIterator iter(geom); !iter.isPastEnd(); ++iter)
       {
-	occ_snip.data[rowCt] = (gridPtr->at("elevation", *iter) + 0.5) * 100;
+	snip.data.push_back(gridPtr->at("elevation", *iter));
 	
 	cout << gridPtr->at("elevation", *iter) << ", ";
 	if (++rowCt % 18 == 0) cout << endl;
@@ -351,36 +350,24 @@ void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 	ros::Rate(10).sleep();
 	snip_pub.publish(snip_msg);*/
       }
+    
+      env_characterization::classify_map srv;
+      srv.request.partitions.push_back(snip);
+      
+      if (clientPtr->call(srv))
+      {
+	env_characterization::Feature feat = srv.response.characters[0];
+	cout << "Feature: " << feat.feature << endl;
+	cout << "Param: " << feat.param << endl;
+      }
+      else
+      {
+	cout << "Service failed" << endl;
+      }
     }
     else
     {
       cout << "Invalid submap" << endl;
-    }
-    
-    cout << endl << endl;
-    
-    for (int i = 0; i < occ_snip.data.size(); i++)
-    {
-      if (occ_snip.data[i] == -1)
-      {
-	occ_snip.data[i] = 50;
-      }
-    }
-    
-    vector<nav_msgs::OccupancyGrid> parts = {occ_snip};
-    
-    env_characterization::classify_map srv;
-    srv.request.partitions = parts;
-    
-    if (clientPtr->call(srv))
-    {
-      env_characterization::Feature feat = srv.response.characters[0];
-      cout << "Feature: " << feat.feature << endl;
-      cout << "Param: " << feat.param << endl;
-    }
-    else
-    {
-      cout << "Service failed" << endl;
     }
   }
   else
@@ -416,6 +403,55 @@ void cloud_cb(sensor_msgs::PointCloud2::ConstPtr msg)
   cloud = *msg;
   octomap::pointCloud2ToOctomap(cloud, octomap_cloud);
   cloud_received = true;
+}
+
+void Flattenize(GridMap &grid, vector<env_characterization::Feature> *features, double padding, int rFilter, float varThresh)
+{  
+  bool isSuccess;
+  Length len = grid.getLength() - Length(padding, padding);
+  cout << len[0] << "..." << len[1] << endl;
+  SubmapGeometry geom(grid, grid.getPosition(), grid.getLength() - Length(padding, padding), isSuccess);
+  
+  if (isSuccess)
+  {
+    int idx = 0;
+    for (SubmapIterator iter(grid, Index(10, 10), grid.getSize() - Size(20, 20)); !iter.isPastEnd(); ++iter)
+    {
+      Position cellPos;
+      grid.getPosition(*iter, cellPos);
+      
+      float xSqSum = 0;
+      float xSum = 0;
+      int sampleCt = 0;
+      
+      double radius = rFilter * grid.getResolution();
+      
+      //cout << "Position: " << cellPos[0] << ", " << cellPos[1] << endl;
+
+      for (grid_map::CircleIterator iterator(grid, cellPos, radius); !iterator.isPastEnd(); ++iterator)
+      {
+	float val = grid.at("elevation", *iterator);
+	
+	xSqSum += pow(val, 2);
+	xSum += val;
+	sampleCt++;
+      }
+      
+      float var = xSqSum / sampleCt - pow(xSum / sampleCt, 2);
+      
+      if (var < varThresh || sampleCt == 0)
+      {
+	(*features)[idx].feature = 0;
+	grid.at("feature", *iter) = 0;
+      }
+      
+      idx++;
+    }
+  }
+  else
+  {
+    cout << "Invalid submap" << endl;
+  }
 }
 
 vector<int> ClassifyFlat(const nav_msgs::OccupancyGrid &occ_grid, int padding, int rFilter, float varThresh)
@@ -455,7 +491,7 @@ vector<int> ClassifyFlat(const nav_msgs::OccupancyGrid &occ_grid, int padding, i
       
       if (var < varThresh || sampleCt == 0)
       {
-	features[i * occ_grid.info.width + j] = 1;
+	features[i * occ_grid.info.width + j] = 0;
 	
 	/*for (int offY = 0; offY < filterSize; offY++)
 	{
@@ -471,6 +507,34 @@ vector<int> ClassifyFlat(const nav_msgs::OccupancyGrid &occ_grid, int padding, i
   }
   
   return features;
+}
+
+vector<std_msgs::Float32MultiArray> Snippetize(GridMap &grid, double padding)
+{
+  vector<std_msgs::Float32MultiArray> snippets;
+  
+  int snipCt = 0;
+  for (SubmapIterator iter(grid, Index(10, 10), grid.getSize() - Size(20, 20)); !iter.isPastEnd(); ++iter)
+  {
+    Position cellPos;
+    grid.getPosition(*iter, cellPos);
+    
+    if (int(grid.at("feature", *iter)) == -1)
+    {      
+      std_msgs::Float32MultiArray snip;
+      for (SubmapIterator snipIt(grid, *iter - Index(9, 9), Size(18, 18)); !snipIt.isPastEnd(); ++snipIt)
+      {
+	snip.data.push_back(grid.at("elevation", *snipIt));
+      }
+      
+      snippets.push_back(snip);
+      snipCt++;
+    }
+  }
+  
+  cout << "snipCt: " << snipCt << endl;
+  
+  return snippets;
 }
 
 vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_grid, int size, vector<bool> *selection=NULL)
@@ -519,7 +583,7 @@ vector<nav_msgs::OccupancyGrid> PartitionMap(const nav_msgs::OccupancyGrid &occ_
       {
 	cout << "Invalid submap" << endl;
       }
-	
+      
       /*vector<int8_t> vec;
       for (int k = 0; k < size; k++)
       {
@@ -871,7 +935,7 @@ int main(int argc, char** argv)
   
   listener = new tf::TransformListener;
   
-  GridMap grid({"elevation"});
+  GridMap grid({"elevation", "feature", "param", "bloat"});
   grid.setFrameId("map");
   
   /*if (debug)
@@ -953,7 +1017,24 @@ int main(int argc, char** argv)
   chrono::steady_clock::time_point totStart = chrono::steady_clock::now();
   
   //Find flat regions in map
-  int mapCush = 10;
+  double mapCush = 0.2;
+  cout << "Map Size: " << grid.getSize()[0] << " x " << grid.getSize()[1] << endl;
+  vector<env_characterization::Feature> features(grid.getSize()[0] * grid.getSize()[1], env_characterization::Feature());
+  for (vector<env_characterization::Feature>::iterator iter = features.begin(); iter != features.end(); iter++)
+  {
+    iter->feature = -1;
+  }
+  
+  for (GridMapIterator iter(grid); !iter.isPastEnd(); ++iter)
+  {
+    grid.at("feature", *iter) = -1;
+    grid.at("param", *iter) = 0;
+  }
+  
+  cout << "Feature map length: " << features.size() << endl;
+  
+  Flattenize(grid, &features, mapCush, 3, 0.0001);
+  
   vector<int> flatMap = ClassifyFlat(occ_grid, 0, 3, 0.0001);
   
   cout << "flatMap Size: " << flatMap.size() << endl;
@@ -993,10 +1074,11 @@ int main(int argc, char** argv)
   
   for (int i = 0; i < flatMap.size(); i++)
   {
-    flat_msg.data.push_back(flatMap[i] * 10);
-  }
+    flat_msg.data.push_back(features[i].feature * 10);
+  }  
   
-  vector<nav_msgs::OccupancyGrid> partitions = PartitionMap(occ_grid, size, &selection);
+  vector<std_msgs::Float32MultiArray> partitions = Snippetize(grid, mapCush);
+  //vector<nav_msgs::OccupancyGrid> partitions = PartitionMap(occ_grid, size, &selection);
   
   cout << "Partitions: " << partitions.size() << endl;
   
@@ -1025,67 +1107,31 @@ int main(int argc, char** argv)
 
     cout << "Classification Time: " << chrono::duration_cast<chrono::microseconds>(t1 - start).count() / 1000000.0 << endl;
     
-    //classes.data = srv.response.characters.data;
-    
     int featCt = 0;
-    classes.data = {};
-    for (int i = 0; i < flatMap.size(); i++)
+    for (SubmapIterator iter(grid, Index(10, 10), grid.getSize() - Size(20, 20)); !iter.isPastEnd(); ++iter)
     {
-      if (flatMap[i] == 2)// && featCt < srv.response.characters.size())
+      if (int(grid.at("feature", *iter)) == -1)
       {
-	//int feat = int(srv.response.characters.data[featCt]);
-	
-	env_characterization::Feature feat = srv.response.characters[featCt];
-	featureMap.push_back(feat);
-	
-	if (feat.feature > 0)
-	{
-	  classes.data.push_back(((feat.param == 6) * 2 + 1) * 10);
-	}
-	else
-	{
-	  classes.data.push_back(0);
-	}
-	
-	/*if (feat.feature == 6)
-	{
-	  feat.feature -= (feat.feature == 0);
-	  featureMap.push_back(feat);
-	  
-	  //featureMap.push_back(feat - (feat == 0));
-	  //classes.data.push_back((srv.response.characters.data[featCt] == 6) * 10);
-	}
-	else
-	{
-	  feat.feature = -1;
-	  featureMap.push_back(-1);
-	  classes.data.push_back(0);
-	}*/
-	
+	grid.at("feature", *iter) = srv.response.characters[featCt].feature;
+	grid.at("param", *iter) = srv.response.characters[featCt].param;
 	featCt++;
       }
-      else if (flatMap[i] == 1)
-      {
-	env_characterization::Feature feat;
-	feat.feature = 0;
-	featureMap.push_back(feat);
-	classes.data.push_back(100);
-      }
-      else
-      {
-	env_characterization::Feature feat;
-	feat.feature = -1;
-	featureMap.push_back(feat);
-	//featureMap.push_back(-1);
-	
-	classes.data.push_back(0);
-      }
+      
+      env_characterization::Feature feat;
+      feat.feature = grid.at("feature", *iter);
+      feat.param = grid.at("param", *iter);
+      featureMap.push_back(feat);
     }
     
-    /*classes.info.height -= size;
-    classes.info.width -= size;
-    classes.info.origin.position.x += size / 2 * classes.info.resolution;
-    classes.info.origin.position.y += size / 2 * classes.info.resolution;*/
+    cout << "featCt: " << featCt << endl;
+    
+    /*GridMapRosConverter::toMessage(grid, grid_msg);
+    while (ros::ok())
+    {
+      grid_pub.publish(grid_msg);
+      rate.sleep();
+      ros::spinOnce();
+    }*/
   }
   else
   {
@@ -1127,12 +1173,14 @@ int main(int argc, char** argv)
   ledgeLinks.push_back({Link(make_pair(NodeSpec(1, 0, 0, 12), NodeSpec(1, 0, 0, -12)), 4, 24 * 3)});
   featLinks.push_back(ledgeLinks);
   
-  
   //Translate featureMap to bloatFeats
   vector<int> bloatFeats;
   
+  int graphHeight = grid.getSize()[0] - 20;
+  int graphWidth = grid.getSize()[1] - 20;
+  
   int reconRad = 12;
-  configMap planGraph = bloatMap(featureMap, classes.info.height, classes.info.width, configList, angles, 2, reconRad);
+  configMap planGraph = bloatMap(featureMap, graphHeight, graphWidth, configList, angles, 2, reconRad);
   
   cout << "Graph Sizes: car angles " << planGraph[0].size() << "; snake angles " << planGraph[1].size() << endl;
   
@@ -1141,7 +1189,7 @@ int main(int argc, char** argv)
   vector<Node> nodeGraph;
   configNodeMap nodeGrid;
   
-  CreateGraph(nodeGrid, nodeGraph, planGraph, featureMap, occ_grid.info.height, occ_grid.info.width, configList, angles.size(), featLinks);
+  CreateGraph(nodeGrid, nodeGraph, planGraph, featureMap, graphHeight, graphWidth, configList, angles.size(), featLinks);
   
   cout << "Finished Node Graph Creation" << endl;
   cout << "Graph Size: " << nodeGraph.size() << endl;
@@ -1224,6 +1272,11 @@ int main(int argc, char** argv)
   }*/
   
   //Visualization Stuff
+  
+  cout << "Visualizing Stuff" << endl;
+  
+  GridMapRosConverter::toOccupancyGrid(grid, "elevation", -0.5, 0.5, occ_grid);
+  GridMapRosConverter::toOccupancyGrid(grid, "feature", -0.5, 0.5, classes);
   
   //Visualize path cost
   nav_msgs::OccupancyGrid costMap = occ_grid;
