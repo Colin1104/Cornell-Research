@@ -935,7 +935,7 @@ int main(int argc, char** argv)
   
   listener = new tf::TransformListener;
   
-  GridMap grid({"elevation", "feature", "param", "bloat"});
+  GridMap grid({"elevation", "feature", "param", "bloat", "cost"});
   grid.setFrameId("map");
   
   /*if (debug)
@@ -1009,11 +1009,6 @@ int main(int argc, char** argv)
   
   //GridMapCvConverter::addLayerFromImage<uint8_t, 1>(originalImage, "elevation", grid);
   
-  nav_msgs::OccupancyGrid occ_grid;
-  GridMapRosConverter::toOccupancyGrid(grid, "elevation", -0.5, 0.5, occ_grid);
-  
-  occ_pub.publish(occ_grid);
-  
   chrono::steady_clock::time_point totStart = chrono::steady_clock::now();
   
   //Find flat regions in map
@@ -1029,70 +1024,21 @@ int main(int argc, char** argv)
   {
     grid.at("feature", *iter) = -1;
     grid.at("param", *iter) = 0;
+    grid.at("bloat", *iter) = 0;
+    grid.at("cost", *iter) = 0;
   }
   
   cout << "Feature map length: " << features.size() << endl;
   
   Flattenize(grid, &features, mapCush, 3, 0.0001);
   
-  vector<int> flatMap = ClassifyFlat(occ_grid, 0, 3, 0.0001);
-  
-  cout << "flatMap Size: " << flatMap.size() << endl;
-  
-  //Create selection map for classification
-  int size = 18;
-  
-  vector<bool> selection;
-  
-  for (int i = size / 2; i < occ_grid.info.height - size / 2; i++)
-  {
-    for (int j = size / 2; j < occ_grid.info.width - size / 2; j++)
-    {
-      int idx = i * occ_grid.info.width + j;
-      if (flatMap[idx] == 0)
-      {
-	selection.push_back(true);
-	flatMap[idx] = 2;
-      }
-      else
-      {
-	selection.push_back(false);
-      }      
-    }
-  }
-  
-  int featCandCt = 0;
-  for (int i = 0; i < flatMap.size(); i++)
-  {
-    if (flatMap[i] == 2) featCandCt++;
-  }
-  
-  cout << "selection size, count: " << selection.size() << ", " << featCandCt << endl;
-  
-  nav_msgs::OccupancyGrid flat_msg = occ_grid;
-  flat_msg.data = {};
-  
-  for (int i = 0; i < flatMap.size(); i++)
-  {
-    flat_msg.data.push_back(features[i].feature * 10);
-  }  
-  
   vector<std_msgs::Float32MultiArray> partitions = Snippetize(grid, mapCush);
-  //vector<nav_msgs::OccupancyGrid> partitions = PartitionMap(occ_grid, size, &selection);
   
   cout << "Partitions: " << partitions.size() << endl;
   
   env_characterization::classify_map srv;
   srv.request.partitions = partitions;
   
-  nav_msgs::OccupancyGrid classes = occ_grid;
-  
-  cout << "occ_grid size: " << occ_grid.data.size() << endl;
-  
-  //int selection = 0;
-  //cin >> selection;
-  
-  //vector<int> featureMap;
   vector<env_characterization::Feature> featureMap;
   
   chrono::steady_clock::time_point start = chrono::steady_clock::now();
@@ -1139,10 +1085,7 @@ int main(int argc, char** argv)
     
     while (ros::ok())
     {
-      occ_pub.publish(occ_grid);
-      class_pub.publish(classes);
       grid_pub.publish(grid_msg);
-      flat_pub.publish(flat_msg);
       snip_pub.publish(snip_msg);
       
       ros::spinOnce();
@@ -1182,6 +1125,17 @@ int main(int argc, char** argv)
   int reconRad = 12;
   configMap planGraph = bloatMap(featureMap, graphHeight, graphWidth, configList, angles, 2, reconRad);
   
+  for (int i = 0; i < planGraph[0][0].size(); i++)
+  {
+    for (int j = 0; j < planGraph[0][0][i].size(); j++)
+    {
+      if (planGraph[0][0][i][j][0])
+      {
+	grid.at("bloat", Index(i, j) + Index(10, 10)) = 1;
+      }
+    }
+  }
+  
   cout << "Graph Sizes: car angles " << planGraph[0].size() << "; snake angles " << planGraph[1].size() << endl;
   
   cout << "Starting Node Graph Generation" << endl;
@@ -1212,7 +1166,7 @@ int main(int argc, char** argv)
   cout << "Path Planning Time: " << chrono::duration_cast<chrono::microseconds>(totStop - t3).count() / 1000000.0 << endl;
   cout << "Total Processing Time: " << chrono::duration_cast<chrono::microseconds>(totStop - totStart).count() / 1000000.0 << endl;
   
-  float res = occ_grid.info.resolution;
+  float res = grid.getResolution();
   
   cout << "Resolution: " << res << endl;
   
@@ -1221,7 +1175,6 @@ int main(int argc, char** argv)
   
   vector<env_characterization::PathNode> rev_path;
   
-  cout << occ_grid.info.origin.position.y << endl;
   Node* goalNode = &nodeGraph[nodeGrid[1][6][100][200]];
   //Node* goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
   Node* curParent = goalNode->parent;
@@ -1232,8 +1185,8 @@ int main(int argc, char** argv)
   pathNode.action = goalNode->action;
   
   geometry_msgs::Pose waypt;
-  waypt.position.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-  waypt.position.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+  waypt.position.x = goalNode->pose.x * res + grid.getPosition()[0] + res / 2;
+  waypt.position.y = goalNode->pose.y * res + grid.getPosition()[1] + res / 2;
   waypt.position.z = 0;
   pathNode.pose = waypt;
   
@@ -1249,8 +1202,8 @@ int main(int argc, char** argv)
     pathNode.theta = angles[curParent->pose.theta] * 3.141592 / 180;
     pathNode.action = curParent->action;
     
-    waypt.position.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-    waypt.position.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+    waypt.position.x = curParent->pose.x * res + grid.getPosition()[0] + res / 2;
+    waypt.position.y = curParent->pose.y * res + grid.getPosition()[1] + res / 2;
     waypt.position.z = 0;
     pathNode.pose = waypt;
     
@@ -1275,34 +1228,14 @@ int main(int argc, char** argv)
   
   cout << "Visualizing Stuff" << endl;
   
-  GridMapRosConverter::toOccupancyGrid(grid, "elevation", -0.5, 0.5, occ_grid);
-  GridMapRosConverter::toOccupancyGrid(grid, "feature", -0.5, 0.5, classes);
+  cout << graphWidth << " : " << graphHeight << endl;
   
   //Visualize path cost
-  nav_msgs::OccupancyGrid costMap = occ_grid;
-  vector<float> costVec;
-  
   float maxCost = 0;
-  for (int i = 0; i < costMap.info.height; i++)
+  for (int i = 0; i < graphHeight; i++)
   {
-    for (int j = 0; j < costMap.info.width; j++)
+    for (int j = 0; j < graphWidth; j++)
     {
-      /*int idx = nodeGrid[0][0][i][j];
-      if (idx >= 0)
-      {
-	costVec.push_back(nodeGraph[idx].cost);
-	//costMap.data[i * costMap.info.width + j] = nodeGraph[idx].cost;
-	if (nodeGraph[idx].cost < numeric_limits<float>::infinity())
-	{
-	  maxCost = max(maxCost, nodeGraph[idx].cost);
-	}
-
-      }
-      else
-      {
-	costVec.push_back(-1);
-      }*/
-      
       float minCost = numeric_limits<float>::infinity();
       for (int c = 0; c < configList.size(); c++)
       {
@@ -1315,27 +1248,29 @@ int main(int argc, char** argv)
       
       if (minCost < numeric_limits<float>::infinity())
       {
-	costVec.push_back(minCost);
+	grid.at("cost", Index(i, j) + Index(10, 10)) = minCost;
 	maxCost = max(maxCost, minCost);
       }
       else
       {
-	costVec.push_back(-1);
+	grid.at("cost", Index(i, j) + Index(10, 10)) = -1;
       }
     }
   }
   
-  for (int i = 0; i < costVec.size(); i++)
-  {
-    if (costVec[i] >= 0)
-    {
-      costMap.data[i] = int(costVec[i] / maxCost * 90);
-    }
-    else
-    {
-      costMap.data[i] = 0;
-    }
-  }
+  cout << "Visualize Graph" << endl;
+  
+  bool isSuccess;
+  GridMap subGrid = grid.getSubmap(grid.getPosition(), Length(graphWidth, graphHeight) * grid.getResolution(), isSuccess);
+  
+  nav_msgs::OccupancyGrid occ_grid;
+  nav_msgs::OccupancyGrid classes;
+  nav_msgs::OccupancyGrid bloat_msg;
+  nav_msgs::OccupancyGrid costMap;
+  GridMapRosConverter::toOccupancyGrid(subGrid, "elevation", -0.5, 0.5, occ_grid);
+  GridMapRosConverter::toOccupancyGrid(subGrid, "feature", -0.5, 0.5, classes);
+  GridMapRosConverter::toOccupancyGrid(subGrid, "bloat", -0.5, 0.5, bloat_msg);
+  GridMapRosConverter::toOccupancyGrid(subGrid, "cost", -1, maxCost + 10, costMap);
   
   //Visualize Planning Graph
   visualization_msgs::Marker lineTemp;
@@ -1476,25 +1411,6 @@ int main(int argc, char** argv)
     curParent = curParent->parent;
   }*/
   
-  gridSubMap vizGraph = planGraph[0][0];
-  vector<int> vizBloatData;
-  
-  for (int i = 0; i < classes.info.height; i++)
-  {
-    for (int j = 0; j < classes.info.width; j++)
-    {
-      vizBloatData.push_back(vizGraph[i][j][0]);
-    }
-  }
-  
-  nav_msgs::OccupancyGrid bloat_msg = classes;
-  bloat_msg.data = {};
-  
-  for (int i = 0; i < vizBloatData.size(); i++)
-  {
-    bloat_msg.data.push_back(vizBloatData[i] * 10);
-  }
-  
   GridMapRosConverter::toMessage(grid, grid_msg);
   
   while (ros::ok())
@@ -1503,7 +1419,6 @@ int main(int argc, char** argv)
     class_pub.publish(classes);
     grid_pub.publish(grid_msg);
     bloat_pub.publish(bloat_msg);
-    flat_pub.publish(flat_msg);
     cost_pub.publish(costMap);
     snip_pub.publish(snip_msg);
     
