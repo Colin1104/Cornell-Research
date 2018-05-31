@@ -238,9 +238,9 @@ int main(int argc, char** argv)
   pose_init.position.z = 0.0;
   pose_init.orientation = tf::createQuaternionMsgFromYaw(0.0);
   
-  spawn_config(filename, pose_init, &spawn);
+  //spawn_config(filename, pose_init, &spawn);
   
-  ros::Duration(3.0).sleep();
+  //ros::Duration(3.0).sleep();
   
   while (path.path.size() == 0 && ros::ok())
   {

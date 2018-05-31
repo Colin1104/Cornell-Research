@@ -55,6 +55,9 @@ typedef vector<thetaSubMap> configMap;
 grid_map_msgs::GridMap grid_msg;
 grid_map_msgs::GridMap snip_msg;
 GridMap* gridPtr;
+visualization_msgs::Marker* pathVizPtr;
+env_characterization::PathNodeArray* pathPtr;
+
 ros::ServiceClient* clientPtr;
 
 octomap::Pointcloud octomap_cloud;
@@ -70,6 +73,8 @@ bool debug = false;
 ros::Publisher snip_pub;
 
 tf::TransformListener *listener;
+
+vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
 
 struct NodeSpec
 {
@@ -276,6 +281,9 @@ public:
 typedef vector<vector<int>> gridNodeMap;
 typedef vector<gridNodeMap> thetaNodeMap;
 typedef vector<thetaNodeMap> configNodeMap;
+
+vector<Node>* nodeGraphPtr;
+configNodeMap* nodeGridPtr;
 
 void click_cb(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 {
@@ -735,7 +743,7 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 	for (int theta = 0; theta < (configs[c].omni ? 1 : nAngles); theta++)
 	{
 	  vector<bool> bloatFeats = bloatedMap[c][theta][i][j];
-	  graph.push_back(Node(Pose(j, i, theta), c));
+	  graph.push_back(Node(Pose(i, j, theta), c));
 	  graphGrid[c][theta][i][j] = pointer++;
 	}
       }
@@ -751,7 +759,7 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
       int feat = features[i * width + j].feature;
       int param = features[i * width + j].param;
       
-      if (feat == 0)
+      if (feat >= 0)
       {
 	vector<Link> linkz = featLinks[feat][param];
 	
@@ -766,7 +774,7 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 	    int nodeIdx1 = graphGrid[n1.c][n1.th][i + n1.i][j + n1.j];
 	    int nodeIdx2 = graphGrid[n2.c][n2.th][i + n2.i][j + n2.j];
 	    
-	    if (nodeIdx1 > -1 && nodeIdx2 > -1 && validNode(linkz[l].obs.first, bloatedMap[n1.c][n1.th][i + n1.i][j + n1.j])
+	    if (validNode(linkz[l].obs.first, bloatedMap[n1.c][n1.th][i + n1.i][j + n1.j])
 	      && validNode(linkz[l].obs.second, bloatedMap[n2.c][n2.th][i + n2.i][j + n2.j]))
 	    {
 	      graph[nodeIdx1].neighbs.push_back(nodeIdx2);
@@ -807,127 +815,6 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
       }
     }
   }
-  
-  /*for (int i = 0; i < height; i++)
-  {
-    for (int j = 0; j < width; j++)
-    {
-      for (int c = 0; c < configs.size(); c++)
-      {
-	for (int theta = 0; theta < graphGrid[c].size(); theta++)
-	{
-	  int nodeIdx = graphGrid[c][theta][i][j];
-	  
-	  if (nodeIdx >= 0)
-	  {
-	    //Connect action neighbs
-	    vector<Pose> actions = configs[c].getActions(theta);
-	    
-	    for (int a = 0; a < actions.size(); a++)
-	    {
-	      int y = i + actions[a].y;
-	      int x = j + actions[a].x;
-	      int th = actions[a].theta;
-	      
-	      if (th >= 0 && th < graphGrid[c].size() && y >= 0 && y < graphGrid[c][th].size() && x >= 0 && x < graphGrid[c][th][y].size())
-	      {
-		int neighbIdx = graphGrid[c][th][y][x];
-		
-		if (neighbIdx >= 0)
-		{
-		  graph[nodeIdx].neighbs.push_back(neighbIdx);
-		  
-		  float length = sqrt(pow(actions[a].x, 2) + pow(actions[a].y, 2));
-		  
-		  float maxCost = 0;
-		  for (int f = 1; f < bloatedMap[c][theta][i][j].size(); f++)
-		  {
-		    if (bloatedMap[c][theta][i][j][f] || bloatedMap[c][th][y][x][f])
-		    {
-		      maxCost = max(maxCost, configs[c].costs[a][f - 1]);
-		    }
-		  }
-		  
-		  graph[nodeIdx].edgeCosts.push_back(maxCost * length);
-		  graph[nodeIdx].actions.push_back(a);
-		}
-	      }
-	    }
-	    
-	    //If reconf, connect config neighbs
-	    if (!bloatedMap[configs.size()][0][i][j][0])
-	    {
-	      for (int nC = 0; nC < configs.size(); nC++)
-	      {
-		if (nC == c) continue;
-		
-		for (int nTh = 0; nTh < graphGrid[nC].size(); nTh++)
-		{
-		  int neighbIdx = graphGrid[nC][nTh][i][j];
-		  
-		  if (neighbIdx >= 0)
-		  {
-		    graph[nodeIdx].neighbs.push_back(neighbIdx);
-		    graph[nodeIdx].edgeCosts.push_back(50.0);
-		    graph[nodeIdx].actions.push_back(-1);
-		  }
-		}
-	      }
-	    }
-	  }
-	}
-      }
-    }
-  }*/
-  
-  //Now add in feature special action neighbs
-  for (int i = 0; i < height; i++)
-  {
-    for (int j = 0; j < width; j++)
-    {
-      int feat = features[i * width + j].feature;
-      int param = features[i * width + j].param;
-      
-      /*if (feat > 0)
-      {
-	vector<Link> links = featLinks[feat][param];
-	
-	for (int l = 0; l < links.size(); l++)
-	{
-	  Link link = links[l];
-	  int nodeIdx1 = graphGrid[link.vertices.first.c][link.vertices.first.th][i + link.vertices.first.i][j + link.vertices.first.j];
-	  int nodeIdx2 = graphGrid[link.vertices.second.c][link.vertices.second.th][i + link.vertices.second.i][j + link.vertices.second.j];
-	  
-	  if (nodeIdx1 > -1 && nodeIdx2 > -1)
-	  {
-	    graph[nodeIdx1].neighbs.push_back(nodeIdx2);
-	    graph[nodeIdx1].edgeCosts.push_back(link.cost);
-	    graph[nodeIdx1].actions.push_back(link.action);
-	  }
-	}
-      }*/
-      
-      /*if (feat == 1)
-      {
-	switch (int(params[0]))
-	{
-	  //Ledge feature at angle 6, corresponding to c = 1 (snake), th = 6, a = 2 (climb reverse on angle of 135 degrees)
-	  case 5:
-	    int nodeIdx1 = graphGrid[1][6][i + 6][j - 6];
-	    int nodeIdx2 = graphGrid[1][6][i - 6][j + 6];
-	    
-	    if (nodeIdx1 > -1 && nodeIdx2 > -1 && features[(i + 6) * width + (j - 6)].feature == 0 &&
-	      features[(i - 6) * width + (j + 6)].feature == 0)
-	    {
-	      graph[nodeIdx1].neighbs.push_back(nodeIdx2);
-	      graph[nodeIdx1].edgeCosts.push_back(sqrt(pow(9.0, 2) * 2));
-	      graph[nodeIdx1].actions.push_back(3);
-	    }
-	    break;
-	}
-      }*/
-    }
-  }
 }
 
 struct nodeCompare
@@ -941,6 +828,12 @@ struct nodeCompare
 void planPath(vector<Node> &nodeGraph, Node* start, Node* goal=NULL)
 {
   priority_queue<Node*, vector<Node*>, nodeCompare> pq;
+  
+  for (int i = 0; i < nodeGraph.size(); i++)
+  {
+    nodeGraph[i].parent = NULL;
+    nodeGraph[i].cost = numeric_limits<float>::infinity();
+  }
   
   start->cost = 0;
   pq.push(start);
@@ -969,6 +862,129 @@ void planPath(vector<Node> &nodeGraph, Node* start, Node* goal=NULL)
   }
 }
 
+void getPath(geometry_msgs::Pose startPose, geometry_msgs::Pose goalPose)
+{
+  cout << "Acquiring Path" << endl;
+  double yaw = tf::getYaw(goalPose.orientation);
+  
+  Position zeroPos;
+  gridPtr->getPosition(Index(10, 10), zeroPos);
+  
+  double res = gridPtr->getResolution();
+  
+  Index idxStart;
+  Index idxGoal;
+  gridPtr->getIndex(Position(startPose.position.x, startPose.position.y), idxStart);
+  gridPtr->getIndex(Position(goalPose.position.x, goalPose.position.y), idxGoal);
+  
+  idxStart -= Index(10, 10);
+  idxGoal -= Index(10, 10);
+  
+  int x0 = idxStart[0];
+  int y0 = idxStart[1];
+  
+  int xf = idxGoal[0];
+  int yf = idxGoal[1];
+  
+  cout << x0 << " . " << y0 << " . " << xf << " . " << yf << endl;
+  
+  cout << "Start Node: " << (*nodeGridPtr)[0][0][x0][y0] << endl;
+  Node* startNode = &(*nodeGraphPtr)[(*nodeGridPtr)[0][0][x0][y0]];
+  planPath(*nodeGraphPtr, startNode);
+  
+  cout << "Finished Path Planning" << endl;
+  
+  float minCost = numeric_limits<float>::infinity();
+  Node* goalNode = &((*nodeGraphPtr)[(*nodeGridPtr)[0][0][xf][yf]]);
+  for (int c = 0; c < nodeGridPtr->size(); c++)
+  {
+    for (int th = 0; th < (*nodeGridPtr)[c].size(); th++)
+    {
+      Node* testNode = &(*nodeGraphPtr)[(*nodeGridPtr)[c][th][xf][yf]];
+      cout << c << ", " << th << ": " << testNode->cost << endl;
+      if (testNode->cost < minCost)
+      {
+	minCost = testNode->cost;
+	goalNode = testNode;
+      }
+    }
+  }
+  Node* curParent = goalNode->parent;
+  
+  env_characterization::PathNodeArray path;
+  env_characterization::PathNode pathNode;
+  pathNode.config = goalNode->config;
+  pathNode.theta = angles[goalNode->pose.theta] * 3.141592 / 180;
+  pathNode.action = goalNode->action;
+  
+  geometry_msgs::Pose waypt;
+  waypt.position.x = zeroPos[0] - goalNode->pose.x * res + res / 2;
+  waypt.position.y = zeroPos[1] - goalNode->pose.y * res + res / 2;
+  waypt.position.z = 0;
+  pathNode.pose = waypt;
+  
+  path.path.push_back(pathNode);
+  
+  cout << goalNode->pose.x << ", " << goalNode->pose.y << " : " << goalNode->config << endl;
+  cout << "Cost: " << goalNode->cost << endl;
+  while (curParent != NULL)
+  {
+    //cout << curParent->pose.x << ", " << curParent->pose.y << " : " << curParent->config << endl;
+    
+    pathNode.config = curParent->config;
+    pathNode.theta = angles[curParent->pose.theta] * 3.141592 / 180;
+    pathNode.action = curParent->action;
+    
+    waypt.position.x = zeroPos[0] - curParent->pose.x * res + res / 2;
+    waypt.position.y = zeroPos[1] - curParent->pose.y * res + res / 2;
+    waypt.position.z = 0;
+    pathNode.pose = waypt;
+    
+    path.path.push_back(pathNode);
+    
+    curParent = curParent->parent;
+  }
+  
+  reverse(path.path.begin(), path.path.end());
+  
+  *pathPtr = path;
+  
+  cout << "Path Extracted" << endl;
+  
+  //Visualize Path
+  pathVizPtr->points.clear();
+  
+  for (int i = 0; i < path.path.size() - 1; i++)
+  {
+    geometry_msgs::Point p;
+    
+    env_characterization::PathNode node = path.path[i];
+    p.x = node.pose.position.x;
+    p.y = node.pose.position.y;
+    p.z = node.config * 0.02 + node.theta * 0.01;
+    pathVizPtr->points.push_back(p);
+    
+    node = path.path[i + 1];
+    p.x = node.pose.position.x;
+    p.y = node.pose.position.y;
+    p.z = node.config * 0.02 + node.theta * 0.01;
+    pathVizPtr->points.push_back(p);
+  }
+}
+
+void goal_cb(const geometry_msgs::PoseStampedConstPtr& msg)
+{
+  cout << "Nav Goal Received" << endl;
+  geometry_msgs::Pose goalPose = msg->pose;
+  
+  geometry_msgs::Pose startPose;
+  startPose.position.x = 0.5;
+  startPose.position.y = -0.5;
+  startPose.orientation.w = 1;
+  
+  getPath(startPose, goalPose);
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "env_characterization");
@@ -979,6 +995,7 @@ int main(int argc, char** argv)
   ros::Subscriber grid_sub = node.subscribe("/debug_grid", 5, grid_cb);
   ros::Subscriber cloud_sub = node.subscribe("/camera/depth_registered/points", 5, cloud_cb);
   ros::Subscriber click_sub = node.subscribe("/initialpose", 1, click_cb);
+  ros::Subscriber goal_sub = node.subscribe("/move_base_simple/goal", 1, goal_cb);
   
   ros::Publisher grid_pub = node.advertise<grid_map_msgs::GridMap>("/elevation", 1);
   ros::Publisher sub_pub = node.advertise<grid_map_msgs::GridMap>("/elevation_sub", 1);
@@ -1087,18 +1104,16 @@ int main(int argc, char** argv)
   
   //Obstacle candidate list: [flat, ledge]
   vector<float> flatCosts = {1.0, numeric_limits<float>::infinity()};
-  Config carCon(true, {0, 1}, vector<vector<float>>(8, flatCosts), 11, 5, 5);
-  Config snakeCon(false, {0, 1}, {flatCosts, flatCosts, {3.0, 3.0}, {3.0, 3.0}}, 11, 5, 7);
+  Config carCon(true, {0, 1}, vector<vector<float>>(8, flatCosts), 11, 5, 15);
+  Config snakeCon(false, {0, 1}, {flatCosts, flatCosts, {3.0, 3.0}, {3.0, 3.0}}, 15, 7, 7);
   vector<Config> configList = {carCon, snakeCon};
-  
-  vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
+  int reconRad = 35;
   
   //Feature Actions
   
   //Vectors below represent:
   //feat->param->link
   vector<vector<vector<Link>>> featLinks;
-  vector<vector<Link>> ledgeLinks;
   
   //Create action links for flat
   vector<Link> flatLinks;
@@ -1175,9 +1190,41 @@ int main(int argc, char** argv)
   featLinks.push_back({flatLinks});
   
   //Create and push links for ledge terrain
+  vector<vector<Link>> ledgeLinks;
   
-  ledgeLinks.push_back({Link(make_pair(NodeSpec(1, 0, 12, 0), NodeSpec(1, 0, -12, 0)),
-			      make_pair(vector<bool>({1, 0, 1}), vector<bool>({1, 0, 1})), 4, 24 * 3)});
+  //Only need to create and push snake climbing links
+  Link snakeLedgeLink(make_pair(NodeSpec(1, 0, 0, 0), NodeSpec(1, 0, 0, 0)),
+		     make_pair(vector<bool>({1, 0, 1}), vector<bool>({1, 0, 1})), 0, 3.0);
+  for (int theta = 0; theta < 16; theta++)
+  {
+    Link l = snakeLedgeLink;
+    l.vertices.first.th = theta % 8;
+    l.vertices.second.th = theta % 8;
+    
+    //Only do climbing direction now
+    int i = 1;
+    
+    vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435,
+      180, 180 + 26.5651, 180 + 45, 180 + 63.4349, 180 + 90, 180 + 116.565, 180 + 135, 180 + 153.435};
+    
+    l.vertices.first.j = i * round(15 * cos(angles[theta] * M_PI / 180));
+    l.vertices.first.i = i * round(15 * sin(angles[theta] * M_PI / 180));
+    l.vertices.second.j = -l.vertices.first.j;
+    l.vertices.second.i = -l.vertices.first.i;
+    if (theta < 8)
+    {
+      l.action = 4;
+    }
+    else
+    {
+      l.action = 3;
+    }
+    
+    //cout << "Ledge Indices: " << l.vertices.first.j << ", " << l.vertices.first.i << endl;
+    
+    ledgeLinks.push_back({l});
+  }
+  
   featLinks.push_back(ledgeLinks);
   
   //Find flat regions in map
@@ -1199,7 +1246,12 @@ int main(int argc, char** argv)
   
   cout << "Feature map length: " << features.size() << endl;
   
+  chrono::steady_clock::time_point start = chrono::steady_clock::now();
+  
   Flattenize(grid, &features, mapCush, 3, 0.00003);
+  
+  chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+  cout << "Flattenize Time: " << chrono::duration_cast<chrono::microseconds>(t1 - start).count() / 1000000.0 << endl;
   
   vector<std_msgs::Float32MultiArray> partitions = Snippetize(grid, mapCush);
   
@@ -1210,17 +1262,15 @@ int main(int argc, char** argv)
   
   vector<env_characterization::Feature> featureMap;
   
-  chrono::steady_clock::time_point start = chrono::steady_clock::now();
-  
-  chrono::steady_clock::time_point t1;
+  chrono::steady_clock::time_point t2;
   
   if (client.call(srv))
   {
     cout << "Service Responded" << endl;
     
-    t1 = chrono::steady_clock::now();
+    t2 = chrono::steady_clock::now();
 
-    cout << "Classification Time: " << chrono::duration_cast<chrono::microseconds>(t1 - start).count() / 1000000.0 << endl;
+    cout << "Classification Time: " << chrono::duration_cast<chrono::microseconds>(t2 - t1).count() / 1000000.0 << endl;
     
     int featCt = 0;
     for (SubmapIterator iter(grid, Index(10, 10), grid.getSize() - Size(20, 20)); !iter.isPastEnd(); ++iter)
@@ -1239,14 +1289,6 @@ int main(int argc, char** argv)
     }
     
     cout << "featCt: " << featCt << endl;
-    
-    /*GridMapRosConverter::toMessage(grid, grid_msg);
-    while (ros::ok())
-    {
-      grid_pub.publish(grid_msg);
-      rate.sleep();
-      ros::spinOnce();
-    }*/
   }
   else
   {
@@ -1268,10 +1310,9 @@ int main(int argc, char** argv)
   int graphHeight = grid.getSize()[0] - 20;
   int graphWidth = grid.getSize()[1] - 20;
   
-  int reconRad = 12;
   configMap planGraph = bloatMap(features, graphHeight, graphWidth, configList, angles, 2, reconRad);
   
-  for (int i = 0; i < planGraph[0][0].size(); i++)
+  /*for (int i = 0; i < planGraph[0][0].size(); i++)
   {
     for (int j = 0; j < planGraph[0][0][i].size(); j++)
     {
@@ -1293,11 +1334,11 @@ int main(int argc, char** argv)
 	grid.at("bloat", Index(i, j) + Index(10, 10)) = 1;
       }
     }
-  }
+  }*/
   
-  chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+  chrono::steady_clock::time_point t3 = chrono::steady_clock::now();
   
-  cout << "Flattenize Time: " << chrono::duration_cast<chrono::microseconds>(t2 - t1).count() / 1000000.0 << endl;
+  cout << "Bloat Time: " << chrono::duration_cast<chrono::microseconds>(t3 - t2).count() / 1000000.0 << endl;
   
   //Planning Graph Construction
   
@@ -1310,17 +1351,19 @@ int main(int argc, char** argv)
   
   CreateGraph(nodeGrid, nodeGraph, planGraph, featureMap, graphHeight, graphWidth, configList, angles.size(), featLinks);
   
+  nodeGridPtr = &nodeGrid;
+  nodeGraphPtr = &nodeGraph;
+  
   cout << "Finished Node Graph Creation" << endl;
   cout << "Graph Size: " << nodeGraph.size() << endl;
   
-  chrono::steady_clock::time_point t3 = chrono::steady_clock::now();
+  chrono::steady_clock::time_point t4 = chrono::steady_clock::now();
   
-  cout << "Graph Creation Time: " << chrono::duration_cast<chrono::microseconds>(t3 - t2).count() / 1000000.0 << endl;
+  cout << "Graph Creation Time: " << chrono::duration_cast<chrono::microseconds>(t4 - t3).count() / 1000000.0 << endl;
   
   cout << "Begin Dijkstra Path Planning" << endl;
   
   //Dijkstra Path Planning
-  //Node* startNode = &nodeGraph[nodeGrid[0][0][30][10]];
   cout << "Start Node: " << nodeGrid[0][0][100][200] << endl;
   Node* startNode = &nodeGraph[nodeGrid[0][0][100][200]];
   planPath(nodeGraph, startNode);
@@ -1328,30 +1371,31 @@ int main(int argc, char** argv)
   cout << "Finished Path Planning" << endl;
   
   chrono::steady_clock::time_point totStop = chrono::steady_clock::now();
-  cout << "Path Planning Time: " << chrono::duration_cast<chrono::microseconds>(totStop - t3).count() / 1000000.0 << endl;
-  cout << "Total Processing Time: " << chrono::duration_cast<chrono::microseconds>(totStop - totStart).count() / 1000000.0 << endl;
+  cout << "Path Planning Time: " << chrono::duration_cast<chrono::microseconds>(totStop - t4).count() / 1000000.0 << endl;
+  cout << "Total Processing Time: " << chrono::duration_cast<chrono::microseconds>(totStop - start).count() / 1000000.0 << endl;
   
   float res = grid.getResolution();
   
   cout << "Resolution: " << res << endl;
   
   //Publish path msg
-  env_characterization::PathNodeArray path;
   
-  vector<env_characterization::PathNode> rev_path;
   
-  Node* goalNode = &nodeGraph[nodeGrid[1][6][100][200]];
-  //Node* goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
+  Position zeroPos;
+  grid.getPosition(Index(10, 10), zeroPos);
+  
+  Node* goalNode = &nodeGraph[nodeGrid[1][6][168][68]];
   Node* curParent = goalNode->parent;
   
+  env_characterization::PathNodeArray path;
   env_characterization::PathNode pathNode;
   pathNode.config = goalNode->config;
   pathNode.theta = angles[goalNode->pose.theta] * 3.141592 / 180;
   pathNode.action = goalNode->action;
   
   geometry_msgs::Pose waypt;
-  waypt.position.x = goalNode->pose.x * res + grid.getPosition()[0] + res / 2;
-  waypt.position.y = goalNode->pose.y * res + grid.getPosition()[1] + res / 2;
+  waypt.position.x = zeroPos[0] - goalNode->pose.x * res + res / 2;
+  waypt.position.y = zeroPos[1] - goalNode->pose.y * res + res / 2;
   waypt.position.z = 0;
   pathNode.pose = waypt;
   
@@ -1367,8 +1411,8 @@ int main(int argc, char** argv)
     pathNode.theta = angles[curParent->pose.theta] * 3.141592 / 180;
     pathNode.action = curParent->action;
     
-    waypt.position.x = curParent->pose.x * res + grid.getPosition()[0] + res / 2;
-    waypt.position.y = curParent->pose.y * res + grid.getPosition()[1] + res / 2;
+    waypt.position.x = zeroPos[0] - curParent->pose.x * res + res / 2;
+    waypt.position.y = zeroPos[1] - curParent->pose.y * res + res / 2;
     waypt.position.z = 0;
     pathNode.pose = waypt;
     
@@ -1379,15 +1423,7 @@ int main(int argc, char** argv)
   
   reverse(path.path.begin(), path.path.end());
   
-  /*for (int i = 0; i < path.path.size(); i++)
-  {
-    if (path.path[i].config == 1)
-    {
-      path.path[i + 10].action = 3;
-      path.path.erase(path.path.begin() + i + 11, path.path.end());
-      break;
-    }
-  }*/
+  pathPtr = &path;
   
   //Visualization Stuff
   
@@ -1525,18 +1561,19 @@ int main(int argc, char** argv)
   
   //Visualize Path
   visualization_msgs::Marker pathLine = lineTemp;
+  pathLine.header.frame_id = "map";
   pathLine.id = linez.size() + 2;
   pathLine.color.r = 1.0;
   pathLine.color.g = 1.0;
   pathLine.color.b = 1.0;
-  pathLine.scale.x = 0.001;
+  pathLine.scale.x = 0.003;
   
   cout << occ_grid.info.origin.position.y << endl;
   curParent = goalNode->parent;
   
   geometry_msgs::Point p;
-  p.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-  p.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+  p.x = zeroPos[0] - goalNode->pose.x * res + res / 2;
+  p.y = zeroPos[1] - goalNode->pose.y * res + res / 2;
   p.z = (goalNode->config) * 0.02 + goalNode->pose.theta * 0.01;
   
   cout << goalNode->pose.x << ", " << goalNode->pose.y << " : " << goalNode->config << endl;
@@ -1546,35 +1583,15 @@ int main(int argc, char** argv)
     //cout << curParent->pose.x << ", " << curParent->pose.y << " : " << curParent->config << endl;
     
     pathLine.points.push_back(p);
-    p.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-    p.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
+    p.x = zeroPos[0] - curParent->pose.x * res + res / 2;
+    p.y = zeroPos[1] - curParent->pose.y * res + res / 2;
     p.z = (curParent->config) * 0.02 + curParent->pose.theta * 0.01;
     pathLine.points.push_back(p);
     
     curParent = curParent->parent;
   }
   
-  /*goalNode = &nodeGraph[nodeGrid[0][0][10 + 28][83]];
-  curParent = goalNode->parent;
-  
-  p.x = goalNode->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-  p.y = goalNode->pose.x * res + occ_grid.info.origin.position.y + res / 2;
-  p.z = (goalNode->config) * 0.02 + goalNode->pose.theta * 0.01;
-  
-  cout << goalNode->pose.x << ", " << goalNode->pose.y << " : " << goalNode->config << endl;
-  cout << "Cost: " << goalNode->cost << endl;
-  while (curParent != NULL)
-  {
-    //cout << curParent->pose.x << ", " << curParent->pose.y << " : " << curParent->config << endl;
-    
-    pathLine.points.push_back(p);
-    p.x = curParent->pose.y * res + occ_grid.info.origin.position.x + res / 2;
-    p.y = curParent->pose.x * res + occ_grid.info.origin.position.y + res / 2;
-    p.z = (curParent->config) * 0.02 + curParent->pose.theta * 0.01;
-    pathLine.points.push_back(p);
-    
-    curParent = curParent->parent;
-  }*/
+  pathVizPtr = &pathLine;
   
   GridMapRosConverter::toMessage(grid, grid_msg);
   
@@ -1600,8 +1617,8 @@ int main(int argc, char** argv)
     edge13_pub.publish(linez[4]);
     edgeC_pub.publish(lineC);
     
-    path_viz_pub.publish(pathLine);
-    path_pub.publish(path);
+    path_viz_pub.publish(*pathVizPtr);
+    path_pub.publish(*pathPtr);
     
     ros::spinOnce();
     rate.sleep();
