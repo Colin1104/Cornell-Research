@@ -95,12 +95,14 @@ struct NodeSpec
 struct Link
 {
   pair<NodeSpec, NodeSpec> vertices;
+  pair<vector<bool>, vector<bool>> obs;
   int action;
   float cost;
   
-  Link(pair<NodeSpec, NodeSpec> v, int a, float c)
+  Link(pair<NodeSpec, NodeSpec> v, pair<vector<bool>, vector<bool>> o, int a, float c)
   {
     vertices = v;
+    obs = o;
     action = a;
     cost = c;
   }
@@ -520,7 +522,7 @@ vector<std_msgs::Float32MultiArray> Snippetize(GridMap &grid, double padding)
     grid.getPosition(*iter, cellPos);
     
     if (int(grid.at("feature", *iter)) == -1)
-    {      
+    {
       std_msgs::Float32MultiArray snip;
       for (SubmapIterator snipIt(grid, *iter - Index(9, 9), Size(18, 18)); !snipIt.isPastEnd(); ++snipIt)
       {
@@ -672,8 +674,8 @@ configMap bloatMap(const vector<env_characterization::Feature> &data, int height
 	
 	Config conf = configs[c];
 	
-	int bloatFeat = (feature > 0) + 1;
-	if (conf.obs[feature > 0] || feature < 0) bloatFeat = 0;
+	int bloatFeat = feature + 1;
+	//if (conf.obs[feature > 0] || feature < 0) bloatFeat = 0;
 	
 	if (c == configs.size())
 	{
@@ -697,6 +699,22 @@ configMap bloatMap(const vector<env_characterization::Feature> &data, int height
   return planGraph;
 }
 
+bool validNode(vector<bool> v1, vector<bool> v2)
+{
+  if (v1.size() != v2.size())
+  {
+    cout << "Mismatched sizes" << endl;
+    return false;
+  }
+  
+  for (int i = 0; i < v1.size(); i++)
+  {
+    if (v1[i] && v2[i]) return false;
+  }
+  
+  return true;
+}
+
 void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap &bloatedMap,
 		 const vector<env_characterization::Feature> &features, int height, int width,
 		 vector<Config> configs, int nAngles, vector<vector<vector<Link>>> featLinks)
@@ -717,11 +735,8 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 	for (int theta = 0; theta < (configs[c].omni ? 1 : nAngles); theta++)
 	{
 	  vector<bool> bloatFeats = bloatedMap[c][theta][i][j];
-	  if (!bloatFeats[0])
-	  {
-	    graph.push_back(Node(Pose(i, j, theta), c));
-	    graphGrid[c][theta][i][j] = pointer++;
-	  }
+	  graph.push_back(Node(Pose(j, i, theta), c));
+	  graphGrid[c][theta][i][j] = pointer++;
 	}
       }
     }
@@ -730,6 +745,70 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
   cout << "Sizes: " << graphGrid[1].size() << endl;
   
   for (int i = 0; i < height; i++)
+  {
+    for (int j = 0; j < width; j++)
+    {
+      int feat = features[i * width + j].feature;
+      int param = features[i * width + j].param;
+      
+      if (feat == 0)
+      {
+	vector<Link> linkz = featLinks[feat][param];
+	
+	for (int l = 0; l < linkz.size(); l++)
+	{
+	  NodeSpec n1 = linkz[l].vertices.first;
+	  NodeSpec n2 = linkz[l].vertices.second;
+	  
+	  if (n1.th >= 0 && n1.th < graphGrid[n1.c].size() && i + n1.i >= 0 && i + n1.i < graphGrid[n1.c][n1.th].size() && j + n1.j >= 0 && j + n1.j < graphGrid[n1.c][n1.th][i + n1.i].size()
+	    && n2.th >= 0 && n2.th < graphGrid[n2.c].size() && i + n2.i >= 0 && i + n2.i < graphGrid[n2.c][n2.th].size() && j + n2.j >= 0 && j + n2.j < graphGrid[n2.c][n2.th][i + n2.i].size())
+	  {
+	    int nodeIdx1 = graphGrid[n1.c][n1.th][i + n1.i][j + n1.j];
+	    int nodeIdx2 = graphGrid[n2.c][n2.th][i + n2.i][j + n2.j];
+	    
+	    if (nodeIdx1 > -1 && nodeIdx2 > -1 && validNode(linkz[l].obs.first, bloatedMap[n1.c][n1.th][i + n1.i][j + n1.j])
+	      && validNode(linkz[l].obs.second, bloatedMap[n2.c][n2.th][i + n2.i][j + n2.j]))
+	    {
+	      graph[nodeIdx1].neighbs.push_back(nodeIdx2);
+	      graph[nodeIdx1].edgeCosts.push_back(linkz[l].cost * sqrt(pow(n2.i - n1.i, 2) + pow(n2.j - n1.j, 2)));
+	      graph[nodeIdx1].actions.push_back(linkz[l].action);
+	    }
+	  }
+	}
+      }
+      
+      //If reconf, connect config neighbs
+      if (!bloatedMap[configs.size()][0][i][j][0])
+      {
+	for (int c = 0; c < configs.size(); c++)
+	{
+	  for (int theta = 0; theta < graphGrid[c].size(); theta++)
+	  {
+	    int nodeIdx = graphGrid[c][theta][i][j];
+
+	    for (int nC = 0; nC < configs.size(); nC++)
+	    {
+	      if (nC == c) continue;
+	      
+	      for (int nTh = 0; nTh < graphGrid[nC].size(); nTh++)
+	      {
+		int neighbIdx = graphGrid[nC][nTh][i][j];
+		
+		if (neighbIdx >= 0)
+		{
+		  graph[nodeIdx].neighbs.push_back(neighbIdx);
+		  graph[nodeIdx].edgeCosts.push_back(50.0);
+		  graph[nodeIdx].actions.push_back(-1);
+		}
+	      }
+	    }
+	  }
+	}
+      }
+    }
+  }
+  
+  /*for (int i = 0; i < height; i++)
   {
     for (int j = 0; j < width; j++)
     {
@@ -773,11 +852,6 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 		  graph[nodeIdx].actions.push_back(a);
 		}
 	      }
-	      /*else
-	      {
-		graph[nodeIdx].neighbs.push_back(-1);
-		graph[nodeIdx].edgeCosts.push_back(numeric_limits<float>::infinity());
-	      }*/
 	    }
 	    
 	    //If reconf, connect config neighbs
@@ -804,7 +878,7 @@ void CreateGraph(configNodeMap &graphGrid, vector<Node> &graph, const configMap 
 	}
       }
     }
-  }
+  }*/
   
   //Now add in feature special action neighbs
   for (int i = 0; i < height; i++)
@@ -1011,6 +1085,101 @@ int main(int argc, char** argv)
   
   chrono::steady_clock::time_point totStart = chrono::steady_clock::now();
   
+  //Obstacle candidate list: [flat, ledge]
+  vector<float> flatCosts = {1.0, numeric_limits<float>::infinity()};
+  Config carCon(true, {0, 1}, vector<vector<float>>(8, flatCosts), 11, 5, 5);
+  Config snakeCon(false, {0, 1}, {flatCosts, flatCosts, {3.0, 3.0}, {3.0, 3.0}}, 11, 5, 7);
+  vector<Config> configList = {carCon, snakeCon};
+  
+  vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
+  
+  //Feature Actions
+  
+  //Vectors below represent:
+  //feat->param->link
+  vector<vector<vector<Link>>> featLinks;
+  vector<vector<Link>> ledgeLinks;
+  
+  //Create action links for flat
+  vector<Link> flatLinks;
+  
+  //Create and push car links
+  Link carLink(make_pair(NodeSpec(0, 0, 0, 0), NodeSpec(0, 0, 0, 0)), make_pair(vector<bool>({1, 0, 1}), vector<bool>({1, 0, 1})), 0, 1);
+  vector<Link> carLinks;
+  for (int i = -1; i <= 1; i ++)
+  {
+    for (int j = -1; j <= 1; j++)
+    {
+      if (abs(i) + abs(j) == 0) continue;
+      
+      Link l = carLink;
+      l.vertices.second.i = i;
+      l.vertices.second.j = j;
+      
+      flatLinks.push_back(l);
+    }
+  }
+  
+  //Create and push snake links
+  Link snakeFlatLink(make_pair(NodeSpec(1, 0, 0, 0), NodeSpec(1, 0, 0, 0)),
+		     make_pair(vector<bool>({1, 0, 1}), vector<bool>({1, 0, 1})), 0, 1);
+  for (int theta = 0; theta < 8; theta++)
+  {
+    for (int i = -1; i <= 1; i += 2)
+    {
+      Link l = snakeFlatLink;
+      l.vertices.first.th = theta;
+      l.vertices.second.th = theta;
+      
+      //Forward-Backward Neighbors
+      switch (theta)
+      {
+	case 0:
+	  l.vertices.second.j = i * 1;
+	  l.vertices.second.i = i * 0;
+	  break;
+	case 1:
+	  l.vertices.second.j = i * 2;
+	  l.vertices.second.i = i * 1;
+	  break;
+	case 2:
+	  l.vertices.second.j = i * 1;
+	  l.vertices.second.i = i * 1;
+	  break;
+	case 3:
+	  l.vertices.second.j = i * 1;
+	  l.vertices.second.i = i * 2;
+	  break;
+	case 4:
+	  l.vertices.second.j = i * 0;
+	  l.vertices.second.i = i * 1;
+	  break;
+	case 5:
+	  l.vertices.second.j = i * -1;
+	  l.vertices.second.i = i * 2;
+	  break;
+	case 6:
+	  l.vertices.second.j = i * -1;
+	  l.vertices.second.i = i * 1;
+	  break;
+	case 7:
+	  l.vertices.second.j = i * -2;
+	  l.vertices.second.i = i * 1;
+	  break;
+      }
+      
+      flatLinks.push_back(l);
+    }
+  }
+  
+  featLinks.push_back({flatLinks});
+  
+  //Create and push links for ledge terrain
+  
+  ledgeLinks.push_back({Link(make_pair(NodeSpec(1, 0, 12, 0), NodeSpec(1, 0, -12, 0)),
+			      make_pair(vector<bool>({1, 0, 1}), vector<bool>({1, 0, 1})), 4, 24 * 3)});
+  featLinks.push_back(ledgeLinks);
+  
   //Find flat regions in map
   double mapCush = 0.2;
   cout << "Map Size: " << grid.getSize()[0] << " x " << grid.getSize()[1] << endl;
@@ -1030,7 +1199,7 @@ int main(int argc, char** argv)
   
   cout << "Feature map length: " << features.size() << endl;
   
-  Flattenize(grid, &features, mapCush, 3, 0.0001);
+  Flattenize(grid, &features, mapCush, 3, 0.00003);
   
   vector<std_msgs::Float32MultiArray> partitions = Snippetize(grid, mapCush);
   
@@ -1093,29 +1262,6 @@ int main(int argc, char** argv)
     }
   }
   
-  chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
-  
-  cout << "Flattenize Time: " << chrono::duration_cast<chrono::microseconds>(t2 - t1).count() / 1000000.0 << endl;
-  
-  //Planning Graph Construction
-  //Obstacle candidate list: [flat, ledge]
-  vector<float> flatCosts = {1.0, numeric_limits<float>::infinity()};
-  Config carCon(true, {0, 1}, vector<vector<float>>(8, flatCosts), 11, 5, 5);
-  Config snakeCon(false, {0, 1}, {flatCosts, flatCosts, {3.0, 3.0}, {3.0, 3.0}}, 11, 5, 7);
-  vector<Config> configList = {carCon, snakeCon};
-  
-  vector<float> angles = {0, 26.5651, 45, 63.4349, 90, 116.565, 135, 153.435};
-  
-  //Feature Actions
-  
-  //Vectors below represent:
-  //feat->param->link
-  vector<vector<vector<Link>>> featLinks;
-  vector<vector<Link>> ledgeLinks;
-  
-  ledgeLinks.push_back({Link(make_pair(NodeSpec(1, 0, 0, 12), NodeSpec(1, 0, 0, -12)), 4, 24 * 3)});
-  featLinks.push_back(ledgeLinks);
-  
   //Translate featureMap to bloatFeats
   vector<int> bloatFeats;
   
@@ -1123,18 +1269,37 @@ int main(int argc, char** argv)
   int graphWidth = grid.getSize()[1] - 20;
   
   int reconRad = 12;
-  configMap planGraph = bloatMap(featureMap, graphHeight, graphWidth, configList, angles, 2, reconRad);
+  configMap planGraph = bloatMap(features, graphHeight, graphWidth, configList, angles, 2, reconRad);
   
   for (int i = 0; i < planGraph[0][0].size(); i++)
   {
     for (int j = 0; j < planGraph[0][0][i].size(); j++)
     {
-      if (planGraph[0][0][i][j][0])
+      bool obs = 0;
+      for (int c = 0; c < planGraph.size(); c++)
+      {
+	for (int th = 0; th < planGraph[c].size(); th++)
+	{
+	  if (planGraph[c][th][i][j][0])
+	  {
+	    obs = 1;
+	    break;
+	  }
+	}
+	if (obs) break;
+      }
+      if (obs)
       {
 	grid.at("bloat", Index(i, j) + Index(10, 10)) = 1;
       }
     }
   }
+  
+  chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+  
+  cout << "Flattenize Time: " << chrono::duration_cast<chrono::microseconds>(t2 - t1).count() / 1000000.0 << endl;
+  
+  //Planning Graph Construction
   
   cout << "Graph Sizes: car angles " << planGraph[0].size() << "; snake angles " << planGraph[1].size() << endl;
   
