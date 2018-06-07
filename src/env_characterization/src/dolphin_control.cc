@@ -22,7 +22,7 @@ using namespace std;
 
 namespace gazebo
 {
-  class SnakeControl : public ModelPlugin
+  class DolphinControl : public ModelPlugin
   {
     private:      
       physics::ModelPtr smore0, smoreF, smoreFL, smoreFR, smoreB, smoreBL, smoreBR;
@@ -43,6 +43,9 @@ namespace gazebo
     
     /// \brief A node used for ROS transport
     private: ros::NodeHandle* node;
+    
+    private: bool waveUp;
+    private: gazebo::common::Time time;
     
     /// \brief A ROS subscriber
     private: ros::Subscriber drive_sub;
@@ -100,13 +103,15 @@ namespace gazebo
       ros::NodeHandle n;
       node = &n;
       
-      drive_sub = node->subscribe("/turtlebot_teleop/cmd_vel", 1, &SnakeControl::OnRosMsg, this);
-      //action_sub = node->subscribe("/cmd_action", 1, &SnakeControl::action_cb, this);
-      action_srv = node->advertiseService("/cmd_action", &SnakeControl::action_cb, this);
+      time = model->GetWorld()->GetSimTime();
+      
+      drive_sub = node->subscribe("/turtlebot_teleop/cmd_vel", 1, &DolphinControl::OnRosMsg, this);
+      //action_sub = node->subscribe("/cmd_action", 1, &DolphinControl::action_cb, this);
+      action_srv = node->advertiseService("/cmd_action", &DolphinControl::action_cb, this);
       
       //Listen to the update event. This event is broadcast every simulation iteration.
       this->updateConnection = event::Events::ConnectWorldUpdateBegin(
-	std::bind(&SnakeControl::OnUpdate, this));
+	std::bind(&DolphinControl::OnUpdate, this));
       
       // Create our ROS node. This acts in a similar manner to the Gazebo node
       /*this->rosNode.reset(new ros::NodeHandle("gazebo_client"));
@@ -146,16 +151,7 @@ namespace gazebo
 	  Drive(cmd.vel.linear.x);
 	  return true;
 	case 1:
-	  Drive(cmd.vel.linear.x);
-	  return true;
-	case 2:
-	  Drive(cmd.vel.linear.x);
-	  return true;
-	case 3:
-	  Climb(cmd.height.data);
-	  return true;
-	case 4:
-	  Climb_Rev(cmd.height.data);
+	  Wave(cmd.vel.linear.x);
 	  return true;
 	default:
 	  ROS_ERROR("Well that didn't work");
@@ -163,134 +159,45 @@ namespace gazebo
       }
     }
     
-    public: void Climb(float height)
+    public: void Wave(double v)
     {
-      Initialize();
-      
-      //Unfold, reach up and drive into ledge
-      targetVals[0][3] = -1.57;
-      targetVals[1][3] = -0.1;
-      targetVals[2][3] = -0.1;
-      targetVals[3][3] = 0.0;
-      targetVals[4][3] = -1.5;
-      targetVals[5][3] = 0.0;
-      targetVals[6][3] = -0.5;
-      
-      SetVelocity(1);
-      
-      //UpdateControl();
-      
-      ROS_ERROR("Reach Up");
-      
-      sim_sleep(5.0);
-      
-      //SetVelocity(0);
-      
-      //sleep(3);
-      
-      //Climb
-      for (int i = 4; i >= 0; i--)
+      if (waveUp && model->GetWorld()->GetSimTime() - time > 5)
       {
-	if (i < 4) targetVals[i + 2][3] = -0.1;
-	targetVals[i + 1][3] = 1.5;
-	targetVals[i][3] = 0;
-	if (i > 0) targetVals[i - 1][3] = -1.5;
-	else targetVals[1][3] = -1.5;
-	
-	SetVelocity(1);
-	
-	ROS_ERROR("Climb");
-	
-	if (i > 0) sim_sleep(4.0);
-	else sim_sleep(3.0);
+	InitializeRev();
+	time = model->GetWorld()->GetSimTime();
+	waveUp = false;
       }
-      
-      SetVelocity(0);
-      sim_sleep(1.0);
-      targetVals[1][3] = -1.6;
-      targetVals[2][3] = -1.6;
-      sim_sleep(3.0);
-      
-      Initialize();
-      SetVelocity(0);
-      
-      sim_sleep(3.0);
-      
-      SetVelocity(0);
-      
-      ROS_INFO("Finished Climb Gait");
+      if (!waveUp && model->GetWorld()->GetSimTime() - time > 5)
+      {
+	Initialize();
+	time = model->GetWorld()->GetSimTime();
+	waveUp = true;
+      }
+      SetVelocity(v);
     }
     
-    public: void Climb_Rev(double height)
-    {      
-      InitializeRev();
-      
-      //Unfold, reach up and drive into ledge
-      targetVals[6][3] = -0.1;
-      targetVals[5][3] = -0.1;
-      targetVals[4][3] = -0.1;
-      targetVals[3][3] = 0.0;
-      targetVals[2][3] = -1.5;
-      targetVals[1][3] = 0.0;
-      targetVals[0][3] = -1.3;
-      
-      SetVelocity(-1);
-      
-      //UpdateControl();
-      
-      ROS_ERROR("Reach Up");
-      
-      sim_sleep(5.0);
-      
-      //Climb
-      for (int c = 4; c >= 0; c--)
-      {
-	int i = 6 - c;
-	if (c < 4) targetVals[i - 2][3] = -0.1;
-	targetVals[i - 1][3] = 1.5;
-	targetVals[i][3] = 0;
-	if (c > 0) targetVals[i + 1][3] = -1.5;
-	else targetVals[1][3] = -1.5;
-	
-	SetVelocity(-1);
-	
-	ROS_ERROR("Climb");
-	
-	if (i > 0) sim_sleep(4.0);
-      }
-      
-      InitializeRev();
-      SetVelocity(0);
-      
-      sim_sleep(3.0);
-      
-      SetVelocity(0);
-      
-      ROS_INFO("Finished Climb Gait");
-    }
-    
-    public: void Initialize()
+    public: void InitializeRev()
     {
       targetVals[0][3] = -1.5;
       targetVals[1][3] = -1.5;
-      targetVals[2][3] = -1.5;
-      targetVals[3][3] = 0.0;
-      targetVals[4][3] = 0.1;
+      targetVals[2][3] = -0.6;
+      targetVals[3][3] = -0.6;
+      targetVals[4][3] = -1.5;
       targetVals[5][3] = -1.5;
       targetVals[6][3] = 0.0;
       
       UpdateControl();
     }
     
-    public: void InitializeRev()
+    public: void Initialize()
     {
-      targetVals[6][3] = -1.5;
-      targetVals[5][3] = -1.5;
-      targetVals[4][3] = -1.5;
-      targetVals[3][3] = 0.0;
-      targetVals[2][3] = 0.1;
+      targetVals[0][3] = -1.5;
       targetVals[1][3] = -1.5;
-      targetVals[0][3] = -1.3;
+      targetVals[2][3] = 1.5;
+      targetVals[3][3] = 1.5;
+      targetVals[4][3] = -1.5;
+      targetVals[5][3] = -1.5;
+      targetVals[6][3] = 0.0;
       
       UpdateControl();
     }
@@ -303,7 +210,7 @@ namespace gazebo
       double v = _msg->linear.x;
       
       if (v > 0) Initialize();
-      else if (v < 0) InitializeRev();
+      else if (v < 0) Initialize();
       
       this->SetVelocity(v);
     }
@@ -311,7 +218,7 @@ namespace gazebo
     public: void Drive(double v)
     {
       if (v > 0) Initialize();
-      else if (v < 0) InitializeRev();
+      else if (v < 0) Initialize();
       
       this->SetVelocity(v);
     }
@@ -320,10 +227,10 @@ namespace gazebo
     /// \param[in] _vel New target velocity
     public: void SetVelocity(const double &v)
     { 
-      targetVals[0][0] = v;
-      targetVals[0][1] = v;
-      targetVals[1][0] = v;
-      targetVals[1][1] = v;
+      targetVals[0][0] = -v;
+      targetVals[0][1] = -v;
+      targetVals[1][0] = -v;
+      targetVals[1][1] = -v;
       targetVals[2][0] = v;
       targetVals[2][1] = v;
       targetVals[3][0] = v;
@@ -364,5 +271,5 @@ namespace gazebo
   };
   
   //Register this plugin with the simulator
-  GZ_REGISTER_MODEL_PLUGIN(SnakeControl)
+  GZ_REGISTER_MODEL_PLUGIN(DolphinControl)
 }

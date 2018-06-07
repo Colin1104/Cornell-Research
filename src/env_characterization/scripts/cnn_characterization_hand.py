@@ -26,7 +26,7 @@ import cnn_orientation
 
 occ_map = OccupancyGrid()
 
-NUM_CLASSES = 2
+NUM_CLASSES = 3
 NUM_ANGLES = 16
 
 IMAGE_SIZE = 18
@@ -107,10 +107,10 @@ def train():
     for i in range(NUM_CLASSES):
         sample_data = []
         sample_labels = []
-        for j in range(NUM_ANGLES if i > 0 else 1):
+        for j in range(NUM_ANGLES if i == 1 else 1):
             sample_ct = 0
             while True:
-                if i == 0:
+                if i != 1:
                     filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(sample_ct) + ".png"
                 else:
                     filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(j) + "_" + str(sample_ct) + ".png"
@@ -126,7 +126,7 @@ def train():
     
     #Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
-            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/env_classifier_model")
+            model_fn=cnn_model_fn, model_dir="/home/jonathan/Cornell-Research/env_classifier_model")
     
     # Set up logging for predictions
     # Log the values in the "Softmax" tensor with label "probabilities"
@@ -182,7 +182,7 @@ def train():
             shuffle=True)
     mnist_classifier.train(
             input_fn=train_input_fn,
-            steps=30000,
+            steps=60000,
             hooks=[logging_hook])
                 
 def evaluate():
@@ -192,10 +192,10 @@ def evaluate():
     for i in range(NUM_CLASSES):
         sample_data = []
         sample_labels = []
-        for j in range(NUM_ANGLES if i > 0 else 1):
+        for j in range(NUM_ANGLES if i == 1 else 1):
             sample_ct = 0
             while True:
-                if i == 0:
+                if i != 1:
                     filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(sample_ct) + ".png"
                 else:
                     filename = "/home/jonathan/catkin_ws/train_db/" + str(i) + "_" + str(j) + "_" + str(sample_ct) + ".png"
@@ -213,12 +213,12 @@ def evaluate():
         classed_labels.append(np.array(sample_labels))
 
     #Convert lists to arrays for numpy input fn
-    eval_data = np.array(classed_data[1])
-    eval_labels = np.array(classed_labels[1])
+    eval_data = np.array(classed_data[0])
+    eval_labels = np.array(classed_labels[0])
     
     #Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
-            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/env_classifier_model")
+            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/env_classifier_model_gpu")
     
     #Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -233,10 +233,10 @@ def handle_classify_map(req):
     snippets = req.partitions
     
     mnist_classifier = tf.estimator.Estimator(
-            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/env_classifier_model")
+            model_fn=cnn_model_fn, model_dir="/home/jonathan/catkin_ws/env_classifier_model_gpu")
             
     orient_classifier = tf.estimator.Estimator(
-            model_fn=cnn_orientation.cnn_orientation_model_fn, model_dir="/home/jonathan/catkin_ws/train_db/16_orientation_model")
+            model_fn=cnn_orientation.cnn_orientation_model_fn, model_dir="/home/jonathan/catkin_ws/train_db_current_experiment/16_orientation_model")
     
     print np.size(snippets, 0)
     
@@ -269,7 +269,8 @@ def handle_classify_map(req):
         if max(p["probabilities"]) > 0.8 and p["classes"] > 0:
             feat.feature = p["classes"]
             features.append(p["classes"])
-            feature_snips.append(characters[idx])
+            if p["classes"] == 1:
+                feature_snips.append(characters[idx])
             feature_ct += 1
         else:
             feat.feature = -1
@@ -296,7 +297,7 @@ def handle_classify_map(req):
 
     feature_count = 0
     for i in range(np.size(data, 0)):
-        if data[i].feature > 0:
+        if data[i].feature == 1:
             data[i].param = orients[feature_count]
             feature_count += 1
     print orients

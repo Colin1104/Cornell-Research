@@ -43,6 +43,7 @@ find_package(octomap REQUIRED)
    FILES
    classify_map.srv
    action_srv.srv
+   path_srv.srv
  )
  
  add_message_files(
@@ -127,6 +128,9 @@ target_link_libraries(snake_control ${GAZEBO_LIBRARIES})
 
 add_library(car_control SHARED src/car_control.cc)
 target_link_libraries(car_control ${GAZEBO_LIBRARIES})
+
+add_library(dolphin_control SHARED src/dolphin_control.cc)
+target_link_libraries(dolphin_control ${GAZEBO_LIBRARIES})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(

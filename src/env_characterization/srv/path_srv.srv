@@ -1,0 +1,4 @@
+env_characterization/PathNode start
+env_characterization/PathNode goal
+---
+env_characterization/PathNodeArray path
